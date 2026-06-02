@@ -37,8 +37,24 @@ function Index() {
   const [platform, setPlatform] = useState("TikTok/Reels (9:16)");
   const [tone, setTone] = useState("Alta Energia");
   const [clips, setClips] = useState<ViralClip[]>([]);
+  const [sourceUrl, setSourceUrl] = useState("");
 
   const analyze = useServerFn(analyzeTranscript);
+  const fetchT = useServerFn(fetchTranscript);
+
+  const fetchMutation = useMutation({
+    mutationFn: async () => {
+      const r = await fetchT({ data: { url: sourceUrl } });
+      if (r.error) throw new Error(r.error);
+      return r;
+    },
+    onSuccess: (r) => {
+      setTranscript(r.transcript);
+      if (r.videoTitle) setVideoTitle(r.videoTitle);
+      toast.success("Transcrição importada do YouTube");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
 
   const mutation = useMutation({
     mutationFn: async () => {
