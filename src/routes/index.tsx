@@ -117,6 +117,29 @@ function Index() {
         <section className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-20 animate-entry">
           <div className="lg:col-span-8">
             <label className="font-display text-xs uppercase tracking-widest text-muted-foreground mb-2 block">
+              Importar do YouTube
+            </label>
+            <div className="flex gap-2 mb-4">
+              <input
+                type="url"
+                value={sourceUrl}
+                onChange={(e) => setSourceUrl(e.target.value)}
+                placeholder="Cole o link do YouTube (vídeo ou Short)"
+                className="flex-1 bg-surface border border-border rounded-lg px-4 py-3 font-mono text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+              />
+              <button
+                onClick={() => fetchMutation.mutate()}
+                disabled={!sourceUrl.trim() || fetchMutation.isPending}
+                className="bg-surface border border-primary text-primary hover:bg-primary hover:text-primary-foreground font-display uppercase tracking-wider text-sm px-6 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+              >
+                {fetchMutation.isPending ? "Buscando..." : "Importar"}
+              </button>
+            </div>
+            <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground/60 mb-4">
+              YouTube/Shorts via legenda automática · TikTok/Reels/X: cole a transcrição manualmente abaixo
+            </p>
+
+            <label className="font-display text-xs uppercase tracking-widest text-muted-foreground mb-2 block">
               Raw Transcript
             </label>
             <textarea
