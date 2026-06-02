@@ -1,0 +1,6 @@
+# ViralForce.AI
+
+> AI-powered viral clip extractor. Paste a long-form video transcript and get the 5 best 30-60s clips for TikTok, Reels, and Shorts with viral score, hooks, and visual direction.
+
+## Pages
+- [Home](/): Paste transcript and extract viral clips
