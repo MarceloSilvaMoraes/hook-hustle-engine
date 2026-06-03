@@ -17,7 +17,7 @@ interface Props {
   onPlay?: (clip: ViralClip) => void;
 }
 
-export function ClipCard({ clip, index }: Props) {
+export function ClipCard({ clip, index, onPlay }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
 
