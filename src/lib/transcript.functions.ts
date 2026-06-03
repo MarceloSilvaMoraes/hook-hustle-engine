@@ -33,6 +33,23 @@ function formatTimestamp(seconds: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
+function normalizeTranscriptError(error: unknown): string {
+  if (error instanceof Error) {
+    const message = error.message;
+    if (message.includes("Transcript is disabled")) {
+      return "Transcrição automática desativada neste vídeo. Cole a transcrição manualmente.";
+    }
+    if (message.includes("Unable to find a transcript") || message.includes("No transcript found")) {
+      return "Nenhuma transcrição encontrada para este vídeo.";
+    }
+    if (message.includes("Video unavailable") || message.includes("video unavailable")) {
+      return "Vídeo indisponível ou removido no YouTube.";
+    }
+    return message;
+  }
+  return "Falha ao buscar transcrição.";
+}
+
 export const fetchTranscript = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => InputSchema.parse(data))
   .handler(async ({ data }): Promise<FetchTranscriptResult> => {
@@ -109,7 +126,7 @@ export const fetchTranscript = createServerFn({ method: "POST" })
         videoTitle: "",
         videoId: ytId ?? "",
         source: "youtube",
-        error: e instanceof Error ? e.message : "Falha ao buscar transcrição.",
+        error: normalizeTranscriptError(e),
       };
     }
   });
