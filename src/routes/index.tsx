@@ -31,6 +31,13 @@ const PLACEHOLDER = `Cole aqui a transcrição completa do seu vídeo longo (pod
 
 Exemplo: [00:00] Hoje eu vou te mostrar o erro que 99% dos empreendedores cometem...`;
 
+function parseTimestampToSeconds(ts: string): number {
+  const parts = ts.split(":").map((p) => parseInt(p, 10) || 0);
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  if (parts.length === 2) return parts[0] * 60 + parts[1];
+  return parts[0] || 0;
+}
+
 function Index() {
   const [transcript, setTranscript] = useState("");
   const [videoTitle, setVideoTitle] = useState("");
@@ -38,6 +45,8 @@ function Index() {
   const [tone, setTone] = useState("Alta Energia");
   const [clips, setClips] = useState<ViralClip[]>([]);
   const [sourceUrl, setSourceUrl] = useState("");
+  const [videoId, setVideoId] = useState("");
+  const [playing, setPlaying] = useState<{ start: number; end: number; title: string } | null>(null);
 
   const analyze = useServerFn(analyzeTranscript);
   const fetchT = useServerFn(fetchTranscript);
