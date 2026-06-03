@@ -31,6 +31,13 @@ const PLACEHOLDER = `Cole aqui a transcrição completa do seu vídeo longo (pod
 
 Exemplo: [00:00] Hoje eu vou te mostrar o erro que 99% dos empreendedores cometem...`;
 
+function parseTimestampToSeconds(ts: string): number {
+  const parts = ts.split(":").map((p) => parseInt(p, 10) || 0);
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  if (parts.length === 2) return parts[0] * 60 + parts[1];
+  return parts[0] || 0;
+}
+
 function Index() {
   const [transcript, setTranscript] = useState("");
   const [videoTitle, setVideoTitle] = useState("");
@@ -38,6 +45,8 @@ function Index() {
   const [tone, setTone] = useState("Alta Energia");
   const [clips, setClips] = useState<ViralClip[]>([]);
   const [sourceUrl, setSourceUrl] = useState("");
+  const [videoId, setVideoId] = useState("");
+  const [playing, setPlaying] = useState<{ start: number; end: number; title: string } | null>(null);
 
   const analyze = useServerFn(analyzeTranscript);
   const fetchT = useServerFn(fetchTranscript);
@@ -51,6 +60,7 @@ function Index() {
     onSuccess: (r) => {
       setTranscript(r.transcript);
       if (r.videoTitle) setVideoTitle(r.videoTitle);
+      if (r.videoId) setVideoId(r.videoId);
       toast.success("Transcrição importada do YouTube");
     },
     onError: (e: Error) => toast.error(e.message),
@@ -233,6 +243,40 @@ function Index() {
               </span>
             </div>
 
+            {videoId && playing && (
+              <div id="player" className="mb-8 bg-surface border border-primary/40 rounded-2xl p-4 sticky top-20 z-40 shadow-2xl shadow-primary/10">
+                <div className="flex justify-between items-center mb-3">
+                  <div className="min-w-0 flex-1 mr-3">
+                    <div className="font-mono text-[10px] uppercase tracking-widest text-primary mb-1">
+                      ▶ Reproduzindo · {Math.max(1, playing.end - playing.start)}s
+                    </div>
+                    <div className="font-display text-sm truncate">{playing.title}</div>
+                  </div>
+                  <button
+                    onClick={() => setPlaying(null)}
+                    className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground hover:text-primary px-3 py-1 border border-border rounded transition-colors"
+                  >
+                    Fechar
+                  </button>
+                </div>
+                <div className="relative w-full" style={{ aspectRatio: "16 / 9" }}>
+                  <iframe
+                    key={`${playing.start}-${playing.end}`}
+                    src={`https://www.youtube.com/embed/${videoId}?start=${playing.start}&end=${playing.end}&autoplay=1&rel=0&modestbranding=1`}
+                    title={playing.title}
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                    className="absolute inset-0 w-full h-full rounded-lg border border-border"
+                  />
+                </div>
+                <p className="mt-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground/60">
+                  O player pausa automaticamente no fim do clipe · {playing.start}s → {playing.end}s
+                </p>
+              </div>
+            )}
+
+
+
             {mutation.isPending && (
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                 {Array.from({ length: 5 }).map((_, i) => (
@@ -256,7 +300,25 @@ function Index() {
             {clips.length > 0 && !mutation.isPending && (
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                 {clips.map((clip, idx) => (
-                  <ClipCard key={idx} clip={clip} index={idx} />
+                  <ClipCard
+                    key={idx}
+                    clip={clip}
+                    index={idx}
+                    onPlay={
+                      videoId
+                        ? (c) => {
+                            setPlaying({
+                              start: parseTimestampToSeconds(c.startTimestamp),
+                              end: parseTimestampToSeconds(c.endTimestamp),
+                              title: c.title,
+                            });
+                            setTimeout(() => {
+                              document.getElementById("player")?.scrollIntoView({ behavior: "smooth", block: "center" });
+                            }, 50);
+                          }
+                        : undefined
+                    }
+                  />
                 ))}
               </div>
             )}

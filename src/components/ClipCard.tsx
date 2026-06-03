@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Copy, Check, ChevronDown } from "lucide-react";
+import { Copy, Check, ChevronDown, Play } from "lucide-react";
 import type { ViralClip } from "@/lib/clips.functions";
 
 const TRIGGER_LABELS: Record<string, string> = {
@@ -14,9 +14,10 @@ const TRIGGER_LABELS: Record<string, string> = {
 interface Props {
   clip: ViralClip;
   index: number;
+  onPlay?: (clip: ViralClip) => void;
 }
 
-export function ClipCard({ clip, index }: Props) {
+export function ClipCard({ clip, index, onPlay }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -79,6 +80,16 @@ TRECHO: "${clip.transcriptExcerpt}"`;
       <p className="text-sm text-muted-foreground mb-4 italic font-mono bg-black/40 p-3 rounded line-clamp-3">
         "{clip.hookQuote}"
       </p>
+      {onPlay && (
+        <button
+          onClick={() => onPlay(clip)}
+          className="mb-4 flex items-center justify-center gap-2 bg-primary text-primary-foreground hover:bg-primary/90 font-display text-xs uppercase tracking-widest py-2.5 rounded-lg transition-all active:scale-[0.98]"
+        >
+          <Play className="size-3 fill-current" />
+          Reproduzir clipe
+        </button>
+      )}
+
 
       <div className="space-y-3 mb-4">
         <div className="text-[10px] font-display uppercase tracking-widest text-muted-foreground">
