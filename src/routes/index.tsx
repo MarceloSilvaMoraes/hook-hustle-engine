@@ -60,6 +60,7 @@ function Index() {
     onSuccess: (r) => {
       setTranscript(r.transcript);
       if (r.videoTitle) setVideoTitle(r.videoTitle);
+      if (r.videoId) setVideoId(r.videoId);
       toast.success("Transcrição importada do YouTube");
     },
     onError: (e: Error) => toast.error(e.message),
