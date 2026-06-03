@@ -38,6 +38,65 @@ function parseTimestampToSeconds(ts: string): number {
   return parts[0] || 0;
 }
 
+function platformCaption(platform: string, clip: ViralClip): string {
+  const base = `${clip.hookQuote}\n\n${clip.justification}`;
+  if (platform.includes("TikTok") || platform.includes("Reels")) return `${base}\n\n#fyp #foryou #viral #parati #brasil`;
+  if (platform.includes("Shorts")) return `${base}\n\n#shorts #viral #brasil`;
+  if (platform.includes("LinkedIn")) return `${base}\n\nO que você pensa sobre isso? Comenta aí 👇\n\n#carreira #lideranca`;
+  return base;
+}
+
+function exportInstructions(clips: ViralClip[], videoTitle: string, videoId: string, platform: string) {
+  const url = videoId ? `https://youtube.com/watch?v=${videoId}` : "(transcrição manual)";
+  const crop = platform.includes("9:16") || platform.includes("Shorts") ? "9:16 (1080x1920)" : platform.includes("LinkedIn") ? "1:1 ou 16:9" : "conforme plataforma";
+  const lines: string[] = [
+    `VIRALFORCE.AI · BRIEFING DE CORTES`,
+    `===================================`,
+    `Vídeo: ${videoTitle || "(sem título)"}`,
+    `Fonte: ${url}`,
+    `Plataforma alvo: ${platform}`,
+    `Total de clipes: ${clips.length}`,
+    `Gerado em: ${new Date().toLocaleString("pt-BR")}`,
+    ``,
+    `INSTRUÇÕES (CapCut / InShot / Premiere):`,
+    `1. Abra o vídeo original no editor`,
+    `2. Para cada clipe, corte nos timestamps abaixo`,
+    `3. Aplique crop ${crop}`,
+    `4. Cole a legenda sugerida na descrição do post`,
+    ``,
+    `===================================`,
+    ``,
+  ];
+  clips.forEach((c, i) => {
+    lines.push(
+      `[CLIPE ${String(i + 1).padStart(2, "0")}] · Score ${c.score}/100`,
+      `Título: ${c.title}`,
+      `Timestamps: ${c.startTimestamp} → ${c.endTimestamp} (${c.durationSeconds}s)`,
+      `Link direto: ${videoId ? `https://youtu.be/${videoId}?t=${parseTimestampToSeconds(c.startTimestamp)}` : "(n/a)"}`,
+      `Gatilhos: ${c.triggers.join(", ")}`,
+      ``,
+      `--- LEGENDA PARA POSTAGEM (${platform}) ---`,
+      platformCaption(platform, c),
+      ``,
+      `--- DIREÇÃO VISUAL ---`,
+      `Legendas: ${c.captionStyle}`,
+      `B-roll: ${c.brollSuggestion}`,
+      ``,
+      `--- TRECHO ---`,
+      `"${c.transcriptExcerpt}"`,
+      ``,
+      `===================================`,
+      ``,
+    );
+  });
+  const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `viralforce-${(videoTitle || "clipes").toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40)}.txt`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
 function Index() {
   const [transcript, setTranscript] = useState("");
   const [videoTitle, setVideoTitle] = useState("");
@@ -234,21 +293,28 @@ function Index() {
         {/* Results */}
         {(clips.length > 0 || mutation.isPending) && (
           <section id="results">
-            <div className="flex justify-between items-end mb-8 border-b border-border pb-4">
+            <div className="flex justify-between items-end mb-8 border-b border-border pb-4 gap-4 flex-wrap">
               <h2 className="font-display text-3xl md:text-4xl uppercase tracking-tighter italic">
                 Top Viral Clips {clips.length > 0 && <span className="text-muted-foreground">({String(clips.length).padStart(2, "0")})</span>}
               </h2>
-              <span className="font-mono text-xs text-muted-foreground hidden md:block">
-                ORDENADO POR SCORE
-              </span>
+              {clips.length > 0 && (
+                <button
+                  onClick={() => exportInstructions(clips, videoTitle, videoId, platform)}
+                  className="font-mono text-[10px] uppercase tracking-widest text-primary border border-primary/40 hover:bg-primary hover:text-primary-foreground px-4 py-2 rounded transition-colors"
+                >
+                  ↓ Exportar instruções (.txt)
+                </button>
+              )}
             </div>
 
-            {videoId && playing && (
+            {videoId && playing && (() => {
+              const vertical = platform.includes("9:16") || platform.includes("Shorts");
+              return (
               <div id="player" className="mb-8 bg-surface border border-primary/40 rounded-2xl p-4 sticky top-20 z-40 shadow-2xl shadow-primary/10">
                 <div className="flex justify-between items-center mb-3">
                   <div className="min-w-0 flex-1 mr-3">
                     <div className="font-mono text-[10px] uppercase tracking-widest text-primary mb-1">
-                      ▶ Reproduzindo · {Math.max(1, playing.end - playing.start)}s
+                      ▶ {vertical ? "Preview 9:16" : "Preview 16:9"} · {Math.max(1, playing.end - playing.start)}s · {platform}
                     </div>
                     <div className="font-display text-sm truncate">{playing.title}</div>
                   </div>
@@ -259,21 +325,46 @@ function Index() {
                     Fechar
                   </button>
                 </div>
-                <div className="relative w-full" style={{ aspectRatio: "16 / 9" }}>
-                  <iframe
-                    key={`${playing.start}-${playing.end}`}
-                    src={`https://www.youtube.com/embed/${videoId}?start=${playing.start}&end=${playing.end}&autoplay=1&rel=0&modestbranding=1`}
-                    title={playing.title}
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                    className="absolute inset-0 w-full h-full rounded-lg border border-border"
-                  />
-                </div>
+                {vertical ? (
+                  <div className="flex justify-center bg-black/60 rounded-lg py-4">
+                    <div className="relative bg-black rounded-2xl overflow-hidden border-2 border-border" style={{ width: 280, height: 498 }}>
+                      <iframe
+                        key={`${playing.start}-${playing.end}-v`}
+                        src={`https://www.youtube.com/embed/${videoId}?start=${playing.start}&end=${playing.end}&autoplay=1&rel=0&modestbranding=1&controls=0`}
+                        title={playing.title}
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+                        style={{ width: 886, height: 498 }}
+                      />
+                      <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/80 to-transparent pointer-events-none">
+                        <div className="font-display text-white text-sm uppercase tracking-tight line-clamp-2 drop-shadow-lg">
+                          {playing.title}
+                        </div>
+                      </div>
+                      <div className="absolute top-2 right-2 px-2 py-0.5 bg-primary text-primary-foreground rounded font-mono text-[9px] uppercase tracking-widest">
+                        9:16
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="relative w-full" style={{ aspectRatio: "16 / 9" }}>
+                    <iframe
+                      key={`${playing.start}-${playing.end}`}
+                      src={`https://www.youtube.com/embed/${videoId}?start=${playing.start}&end=${playing.end}&autoplay=1&rel=0&modestbranding=1`}
+                      title={playing.title}
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                      className="absolute inset-0 w-full h-full rounded-lg border border-border"
+                    />
+                  </div>
+                )}
                 <p className="mt-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground/60">
-                  O player pausa automaticamente no fim do clipe · {playing.start}s → {playing.end}s
+                  {vertical ? "Simulação do crop 9:16 · Renderize no CapCut com os timestamps" : "O player pausa automaticamente no fim do clipe"} · {playing.start}s → {playing.end}s
                 </p>
               </div>
-            )}
+              );
+            })()}
 
 
 
