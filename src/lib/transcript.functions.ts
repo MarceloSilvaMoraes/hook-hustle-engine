@@ -50,6 +50,7 @@ export const fetchTranscript = createServerFn({ method: "POST" })
       return {
         transcript: "",
         videoTitle: "",
+        videoId: ytId ?? "",
         source: "youtube",
         error: `Por enquanto só suporto links do YouTube. Para ${detected}, baixe o áudio e cole a transcrição manualmente (ou peça pra eu integrar Whisper/AssemblyAI).`,
       };
@@ -64,7 +65,8 @@ export const fetchTranscript = createServerFn({ method: "POST" })
         return {
           transcript: "",
           videoTitle: "",
-          source: "youtube",
+          videoId: ytId ?? "",
+        source: "youtube",
           error: "Vídeo sem legendas disponíveis.",
         };
       }
@@ -97,6 +99,7 @@ export const fetchTranscript = createServerFn({ method: "POST" })
       return {
         transcript: lines.join("\n"),
         videoTitle,
+        videoId: ytId ?? "",
         source: "youtube",
       };
     } catch (e) {
@@ -104,6 +107,7 @@ export const fetchTranscript = createServerFn({ method: "POST" })
       return {
         transcript: "",
         videoTitle: "",
+        videoId: ytId ?? "",
         source: "youtube",
         error: e instanceof Error ? e.message : "Falha ao buscar transcrição.",
       };
