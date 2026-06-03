@@ -266,7 +266,25 @@ function Index() {
             {clips.length > 0 && !mutation.isPending && (
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                 {clips.map((clip, idx) => (
-                  <ClipCard key={idx} clip={clip} index={idx} />
+                  <ClipCard
+                    key={idx}
+                    clip={clip}
+                    index={idx}
+                    onPlay={
+                      videoId
+                        ? (c) => {
+                            setPlaying({
+                              start: parseTimestampToSeconds(c.startTimestamp),
+                              end: parseTimestampToSeconds(c.endTimestamp),
+                              title: c.title,
+                            });
+                            setTimeout(() => {
+                              document.getElementById("player")?.scrollIntoView({ behavior: "smooth", block: "center" });
+                            }, 50);
+                          }
+                        : undefined
+                    }
+                  />
                 ))}
               </div>
             )}
