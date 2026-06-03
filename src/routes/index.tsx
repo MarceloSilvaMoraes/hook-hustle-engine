@@ -234,13 +234,18 @@ function Index() {
         {/* Results */}
         {(clips.length > 0 || mutation.isPending) && (
           <section id="results">
-            <div className="flex justify-between items-end mb-8 border-b border-border pb-4">
+            <div className="flex justify-between items-end mb-8 border-b border-border pb-4 gap-4 flex-wrap">
               <h2 className="font-display text-3xl md:text-4xl uppercase tracking-tighter italic">
                 Top Viral Clips {clips.length > 0 && <span className="text-muted-foreground">({String(clips.length).padStart(2, "0")})</span>}
               </h2>
-              <span className="font-mono text-xs text-muted-foreground hidden md:block">
-                ORDENADO POR SCORE
-              </span>
+              {clips.length > 0 && (
+                <button
+                  onClick={() => exportInstructions(clips, videoTitle, videoId, platform)}
+                  className="font-mono text-[10px] uppercase tracking-widest text-primary border border-primary/40 hover:bg-primary hover:text-primary-foreground px-4 py-2 rounded transition-colors"
+                >
+                  ↓ Exportar instruções (.txt)
+                </button>
+              )}
             </div>
 
             {videoId && playing && (() => {
