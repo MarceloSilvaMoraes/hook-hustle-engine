@@ -243,12 +243,14 @@ function Index() {
               </span>
             </div>
 
-            {videoId && playing && (
+            {videoId && playing && (() => {
+              const vertical = platform.includes("9:16") || platform.includes("Shorts");
+              return (
               <div id="player" className="mb-8 bg-surface border border-primary/40 rounded-2xl p-4 sticky top-20 z-40 shadow-2xl shadow-primary/10">
                 <div className="flex justify-between items-center mb-3">
                   <div className="min-w-0 flex-1 mr-3">
                     <div className="font-mono text-[10px] uppercase tracking-widest text-primary mb-1">
-                      ▶ Reproduzindo · {Math.max(1, playing.end - playing.start)}s
+                      ▶ {vertical ? "Preview 9:16" : "Preview 16:9"} · {Math.max(1, playing.end - playing.start)}s · {platform}
                     </div>
                     <div className="font-display text-sm truncate">{playing.title}</div>
                   </div>
@@ -259,21 +261,46 @@ function Index() {
                     Fechar
                   </button>
                 </div>
-                <div className="relative w-full" style={{ aspectRatio: "16 / 9" }}>
-                  <iframe
-                    key={`${playing.start}-${playing.end}`}
-                    src={`https://www.youtube.com/embed/${videoId}?start=${playing.start}&end=${playing.end}&autoplay=1&rel=0&modestbranding=1`}
-                    title={playing.title}
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                    className="absolute inset-0 w-full h-full rounded-lg border border-border"
-                  />
-                </div>
+                {vertical ? (
+                  <div className="flex justify-center bg-black/60 rounded-lg py-4">
+                    <div className="relative bg-black rounded-2xl overflow-hidden border-2 border-border" style={{ width: 280, height: 498 }}>
+                      <iframe
+                        key={`${playing.start}-${playing.end}-v`}
+                        src={`https://www.youtube.com/embed/${videoId}?start=${playing.start}&end=${playing.end}&autoplay=1&rel=0&modestbranding=1&controls=0`}
+                        title={playing.title}
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+                        style={{ width: 886, height: 498 }}
+                      />
+                      <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/80 to-transparent pointer-events-none">
+                        <div className="font-display text-white text-sm uppercase tracking-tight line-clamp-2 drop-shadow-lg">
+                          {playing.title}
+                        </div>
+                      </div>
+                      <div className="absolute top-2 right-2 px-2 py-0.5 bg-primary text-primary-foreground rounded font-mono text-[9px] uppercase tracking-widest">
+                        9:16
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="relative w-full" style={{ aspectRatio: "16 / 9" }}>
+                    <iframe
+                      key={`${playing.start}-${playing.end}`}
+                      src={`https://www.youtube.com/embed/${videoId}?start=${playing.start}&end=${playing.end}&autoplay=1&rel=0&modestbranding=1`}
+                      title={playing.title}
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                      className="absolute inset-0 w-full h-full rounded-lg border border-border"
+                    />
+                  </div>
+                )}
                 <p className="mt-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground/60">
-                  O player pausa automaticamente no fim do clipe · {playing.start}s → {playing.end}s
+                  {vertical ? "Simulação do crop 9:16 · Renderize no CapCut com os timestamps" : "O player pausa automaticamente no fim do clipe"} · {playing.start}s → {playing.end}s
                 </p>
               </div>
-            )}
+              );
+            })()}
 
 
 
