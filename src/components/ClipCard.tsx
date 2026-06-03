@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Copy, Check, ChevronDown } from "lucide-react";
+import { Copy, Check, ChevronDown, Play } from "lucide-react";
 import type { ViralClip } from "@/lib/clips.functions";
 
 const TRIGGER_LABELS: Record<string, string> = {
@@ -14,6 +14,7 @@ const TRIGGER_LABELS: Record<string, string> = {
 interface Props {
   clip: ViralClip;
   index: number;
+  onPlay?: (clip: ViralClip) => void;
 }
 
 export function ClipCard({ clip, index }: Props) {
