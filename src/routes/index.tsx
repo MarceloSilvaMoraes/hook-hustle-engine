@@ -1,10 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { analyzeTranscript, type ViralClip } from "@/lib/clips.functions";
 import { fetchTranscript } from "@/lib/transcript.functions";
+import { createRenderJob, listRenderJobs, type RenderJob } from "@/lib/render-jobs.functions";
 import { ClipCard } from "@/components/ClipCard";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -105,10 +106,13 @@ function Index() {
   const [clips, setClips] = useState<ViralClip[]>([]);
   const [sourceUrl, setSourceUrl] = useState("");
   const [videoId, setVideoId] = useState("");
+  const [jobs, setJobs] = useState<RenderJob[]>([]);
   const [playing, setPlaying] = useState<{ start: number; end: number; title: string } | null>(null);
 
   const analyze = useServerFn(analyzeTranscript);
   const fetchT = useServerFn(fetchTranscript);
+  const createJob = useServerFn(createRenderJob);
+  const listJobs = useServerFn(listRenderJobs);
 
   const fetchMutation = useMutation({
     mutationFn: async () => {
@@ -121,6 +125,38 @@ function Index() {
       if (r.videoTitle) setVideoTitle(r.videoTitle);
       if (r.videoId) setVideoId(r.videoId);
       toast.success("Transcrição importada do YouTube");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const renderFormat = platform.includes("LinkedIn") ? "16:9" : "9:16";
+
+  const renderMutation = useMutation({
+    mutationFn: async () => {
+      if (!sourceUrl.trim()) {
+        throw new Error("É necessário um link de vídeo para criar um job local.");
+      }
+
+      const result = await createJob({
+        data: {
+          videoUrl: sourceUrl.trim(),
+          videoTitle,
+          platform,
+          renderFormat,
+          clipItems: clips,
+          instructions: `Renderize localmente em ${renderFormat} a partir do vídeo ${sourceUrl.trim()}`,
+        },
+      });
+
+      if (result.error || !result.job) {
+        throw new Error(result.error || "Falha ao criar o job de renderização.");
+      }
+
+      return result.job;
+    },
+    onSuccess: (job) => {
+      setJobs((prev) => [job, ...prev]);
+      toast.success("Job criado e enviado para o worker local.");
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -143,7 +179,25 @@ function Index() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const fetchJobs = async () => {
+    const result = await listJobs({ data: { limit: 8 } });
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
+    setJobs(result.jobs ?? []);
+  };
+
+  useEffect(() => {
+    void fetchJobs();
+    const timer = window.setInterval(() => {
+      void fetchJobs();
+    }, 20000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   const canAnalyze = transcript.trim().length >= 50 && !mutation.isPending;
+  const canCreateJob = clips.length > 0 && sourceUrl.trim().length > 0 && !renderMutation.isPending;
 
   return (
     <div className="min-h-screen bg-background text-foreground font-body selection:bg-primary selection:text-white">
@@ -298,14 +352,65 @@ function Index() {
                 Top Viral Clips {clips.length > 0 && <span className="text-muted-foreground">({String(clips.length).padStart(2, "0")})</span>}
               </h2>
               {clips.length > 0 && (
-                <button
-                  onClick={() => exportInstructions(clips, videoTitle, videoId, platform)}
-                  className="font-mono text-[10px] uppercase tracking-widest text-primary border border-primary/40 hover:bg-primary hover:text-primary-foreground px-4 py-2 rounded transition-colors"
-                >
-                  ↓ Exportar instruções (.txt)
-                </button>
+                <div className="flex flex-wrap gap-3 items-center">
+                  <button
+                    onClick={() => exportInstructions(clips, videoTitle, videoId, platform)}
+                    className="font-mono text-[10px] uppercase tracking-widest text-primary border border-primary/40 hover:bg-primary hover:text-primary-foreground px-4 py-2 rounded transition-colors"
+                  >
+                    ↓ Exportar instruções (.txt)
+                  </button>
+
+                  <button
+                    onClick={() => renderMutation.mutate()}
+                    disabled={!canCreateJob}
+                    className="font-display text-xs uppercase tracking-widest bg-primary text-primary-foreground px-4 py-2 rounded-lg transition-all hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {renderMutation.isPending ? "Criando job..." : "Renderizar no meu PC"}
+                  </button>
+                </div>
               )}
             </div>
+
+            {clips.length > 0 && (
+              <div className="mb-8 rounded-3xl border border-primary/20 bg-surface p-6">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                  <div>
+                    <p className="text-xs uppercase tracking-widest text-muted-foreground">Local render worker</p>
+                    <h3 className="font-display text-2xl mt-2">Crie o job e deixe o worker rodar</h3>
+                    <p className="mt-2 text-sm text-muted-foreground max-w-2xl">
+                      O job é enviado para o banco. O worker local baixa o vídeo, corta os clipes e salva o MP4 no seu diretório.
+                    </p>
+                  </div>
+                  <div className="space-y-2 text-right">
+                    <div className="text-xs uppercase tracking-widest text-muted-foreground">Formato</div>
+                    <div className="rounded-full bg-primary/10 px-4 py-2 text-sm font-medium text-primary">{renderFormat}</div>
+                  </div>
+                </div>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="rounded-2xl border border-border bg-background p-4">
+                    <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Plataforma</div>
+                    <div className="mt-2 font-semibold">{platform}</div>
+                  </div>
+                  <div className="rounded-2xl border border-border bg-background p-4">
+                    <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Vídeo</div>
+                    <div className="mt-2 font-semibold truncate">{sourceUrl || "Sem link"}</div>
+                  </div>
+                  <div className="rounded-2xl border border-border bg-background p-4">
+                    <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Clipes</div>
+                    <div className="mt-2 font-semibold">{clips.length}</div>
+                  </div>
+                  <div className="rounded-2xl border border-border bg-background p-4">
+                    <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Status</div>
+                    <div className="mt-2 font-semibold">{canCreateJob ? "Pronto" : "Informe o link"}</div>
+                  </div>
+                </div>
+                {!sourceUrl.trim() && (
+                  <p className="mt-4 text-sm text-destructive">
+                    Para renderizar localmente, o job precisa de um link de vídeo válido.
+                  </p>
+                )}
+              </div>
+            )}
 
             {videoId && playing && (() => {
               const vertical = platform.includes("9:16") || platform.includes("Shorts");
@@ -413,6 +518,73 @@ function Index() {
                 ))}
               </div>
             )}
+          </section>
+        )}
+
+        {jobs.length > 0 && (
+          <section className="mt-14 rounded-3xl border border-border bg-surface p-6">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-widest text-muted-foreground">Fila de renderização</p>
+                <h2 className="font-display text-3xl mt-2">Jobs locais</h2>
+                <p className="mt-2 text-sm text-muted-foreground max-w-2xl">
+                  O status é atualizado pelo worker local. Atualize a lista sempre que quiser ver o progresso.
+                </p>
+              </div>
+              <button
+                onClick={() => fetchJobs()}
+                className="font-mono text-[10px] uppercase tracking-widest border border-primary/40 text-primary px-4 py-2 rounded-lg hover:bg-primary/10 transition-colors"
+              >
+                Atualizar status
+              </button>
+            </div>
+
+            <div className="mt-6 grid gap-4">
+              {jobs.map((job) => (
+                <div key={job.id} className="rounded-3xl border border-border bg-background p-5">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                    <div className="min-w-0">
+                      <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                        Job {job.id.slice(0, 8)} · {new Date(job.created_at).toLocaleString("pt-BR")}
+                      </div>
+                      <div className="mt-2 font-semibold text-lg truncate">{job.video_title || job.video_url}</div>
+                      <div className="mt-1 text-sm text-muted-foreground">{job.platform} · {job.render_format}</div>
+                    </div>
+                    <div className="rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-widest"
+                      style={{
+                        backgroundColor:
+                          job.status === "done"
+                            ? "rgba(16, 185, 129, 0.12)"
+                            : job.status === "failed"
+                            ? "rgba(239, 68, 68, 0.12)"
+                            : "rgba(59, 130, 246, 0.12)",
+                        color:
+                          job.status === "done"
+                            ? "#10b981"
+                            : job.status === "failed"
+                            ? "#ef4444"
+                            : "#3b82f6",
+                      }}
+                    >
+                      {job.status.replace("_", " ")}
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Saída</div>
+                      <div className="mt-1 text-sm text-foreground break-words">{job.output_path || "Aguardando worker"}</div>
+                    </div>
+                    {job.error_message && (
+                      <div>
+                        <div className="text-[10px] uppercase tracking-widest text-destructive">Erro</div>
+                        <div className="mt-1 text-sm text-destructive">{job.error_message}</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           </section>
         )}
 

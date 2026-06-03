@@ -1,92 +1,85 @@
-@import "tailwindcss" source(none);
-@source "../src";
-@import "tw-animate-css";
-
+@import "tailwindcss" source("./");
 @import url("https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap");
-
 @custom-variant dark (&:is(.dark *));
-
 @theme inline {
-  --font-display: "Anton", sans-serif;
-  --font-body: "Inter", sans-serif;
-  --font-mono: "JetBrains Mono", monospace;
-
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-border: var(--border);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-surface: var(--surface);
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-
-  --ease-studio: cubic-bezier(0.32, 0.72, 0, 1);
+    --font-display: "Anton", sans-serif;
+    --font-body: "Inter", sans-serif;
+    --font-mono: "JetBrains Mono", monospace;
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-border: var(--border);
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+    --color-surface: var(--surface);
+    --color-destructive: var(--destructive);
+    --color-destructive-foreground: var(--destructive-foreground);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-popover: var(--popover);
+    --color-popover-foreground: var(--popover-foreground);
+    --ease-studio: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 :root {
-  --background: oklch(0.13 0 0);
-  --foreground: oklch(0.97 0 0);
-  --muted: oklch(0.97 0 0 / 0.6);
-  --muted-foreground: oklch(0.65 0 0);
-  --primary: oklch(0.68 0.22 35);
-  --primary-foreground: oklch(0.99 0 0);
-  --border: oklch(0.97 0 0 / 0.12);
-  --surface: oklch(0.97 0 0 / 0.05);
-  --card: oklch(0.97 0 0 / 0.05);
-  --card-foreground: oklch(0.97 0 0);
-  --popover: oklch(0.15 0 0);
-  --popover-foreground: oklch(0.97 0 0);
-  --secondary: oklch(0.97 0 0 / 0.08);
-  --secondary-foreground: oklch(0.97 0 0);
-  --accent: oklch(0.97 0 0 / 0.08);
-  --accent-foreground: oklch(0.97 0 0);
-  --destructive: oklch(0.6 0.22 25);
-  --destructive-foreground: oklch(0.99 0 0);
-  --input: oklch(0.97 0 0 / 0.12);
-  --ring: oklch(0.68 0.22 35);
-  --radius: 0.75rem;
+    --background: oklch(0.13 0 0);
+    --foreground: oklch(0.97 0 0);
+    --muted: oklch(0.97 0 0 / 0.6);
+    --muted-foreground: oklch(0.65 0 0);
+    --primary: oklch(0.68 0.22 35);
+    --primary-foreground: oklch(0.99 0 0);
+    --border: oklch(0.97 0 0 / 0.12);
+    --surface: oklch(0.97 0 0 / 0.05);
+    --card: oklch(0.97 0 0 / 0.05);
+    --card-foreground: oklch(0.97 0 0);
+    --popover: oklch(0.15 0 0);
+    --popover-foreground: oklch(0.97 0 0);
+    --secondary: oklch(0.97 0 0 / 0.08);
+    --secondary-foreground: oklch(0.97 0 0);
+    --accent: oklch(0.97 0 0 / 0.08);
+    --accent-foreground: oklch(0.97 0 0);
+    --destructive: oklch(0.6 0.22 25);
+    --destructive-foreground: oklch(0.99 0 0);
+    --input: oklch(0.97 0 0 / 0.12);
+    --ring: oklch(0.68 0.22 35);
+    --radius: 0.75rem;
 }
 
 .dark {
-  --background: oklch(0.13 0 0);
-  --foreground: oklch(0.97 0 0);
+    --background: oklch(0.13 0 0);
+    --foreground: oklch(0.97 0 0);
 }
 
 @keyframes slideUp {
-  from {
-    transform: translateY(20px);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
+    from {
+        transform: translateY(20px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
 }
 
 .animate-entry {
-  animation: slideUp 600ms var(--ease-studio) both;
+    animation: slideUp 600ms var(--ease-studio) both;
 }
 
 @layer base {
-  * {
-    border-color: var(--color-border);
-  }
-  html,
-  body {
-    background-color: var(--color-background);
-    color: var(--color-foreground);
-    font-family: var(--font-body);
-  }
+    * {
+        border-color: var(--color-border);
+    }
+    html,
+    body {
+        background-color: var(--color-background);
+        color: var(--color-foreground);
+        font-family: var(--font-body);
+    }
 }
