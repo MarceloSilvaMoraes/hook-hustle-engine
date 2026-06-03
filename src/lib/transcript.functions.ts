@@ -9,6 +9,7 @@ const InputSchema = z.object({
 export interface FetchTranscriptResult {
   transcript: string;
   videoTitle: string;
+  videoId: string;
   source: "youtube";
   error?: string;
 }
