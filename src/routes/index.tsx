@@ -38,6 +38,65 @@ function parseTimestampToSeconds(ts: string): number {
   return parts[0] || 0;
 }
 
+function platformCaption(platform: string, clip: ViralClip): string {
+  const base = `${clip.hookQuote}\n\n${clip.justification}`;
+  if (platform.includes("TikTok") || platform.includes("Reels")) return `${base}\n\n#fyp #foryou #viral #parati #brasil`;
+  if (platform.includes("Shorts")) return `${base}\n\n#shorts #viral #brasil`;
+  if (platform.includes("LinkedIn")) return `${base}\n\nO que você pensa sobre isso? Comenta aí 👇\n\n#carreira #lideranca`;
+  return base;
+}
+
+function exportInstructions(clips: ViralClip[], videoTitle: string, videoId: string, platform: string) {
+  const url = videoId ? `https://youtube.com/watch?v=${videoId}` : "(transcrição manual)";
+  const crop = platform.includes("9:16") || platform.includes("Shorts") ? "9:16 (1080x1920)" : platform.includes("LinkedIn") ? "1:1 ou 16:9" : "conforme plataforma";
+  const lines: string[] = [
+    `VIRALFORCE.AI · BRIEFING DE CORTES`,
+    `===================================`,
+    `Vídeo: ${videoTitle || "(sem título)"}`,
+    `Fonte: ${url}`,
+    `Plataforma alvo: ${platform}`,
+    `Total de clipes: ${clips.length}`,
+    `Gerado em: ${new Date().toLocaleString("pt-BR")}`,
+    ``,
+    `INSTRUÇÕES (CapCut / InShot / Premiere):`,
+    `1. Abra o vídeo original no editor`,
+    `2. Para cada clipe, corte nos timestamps abaixo`,
+    `3. Aplique crop ${crop}`,
+    `4. Cole a legenda sugerida na descrição do post`,
+    ``,
+    `===================================`,
+    ``,
+  ];
+  clips.forEach((c, i) => {
+    lines.push(
+      `[CLIPE ${String(i + 1).padStart(2, "0")}] · Score ${c.score}/100`,
+      `Título: ${c.title}`,
+      `Timestamps: ${c.startTimestamp} → ${c.endTimestamp} (${c.durationSeconds}s)`,
+      `Link direto: ${videoId ? `https://youtu.be/${videoId}?t=${parseTimestampToSeconds(c.startTimestamp)}` : "(n/a)"}`,
+      `Gatilhos: ${c.triggers.join(", ")}`,
+      ``,
+      `--- LEGENDA PARA POSTAGEM (${platform}) ---`,
+      platformCaption(platform, c),
+      ``,
+      `--- DIREÇÃO VISUAL ---`,
+      `Legendas: ${c.captionStyle}`,
+      `B-roll: ${c.brollSuggestion}`,
+      ``,
+      `--- TRECHO ---`,
+      `"${c.transcriptExcerpt}"`,
+      ``,
+      `===================================`,
+      ``,
+    );
+  });
+  const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `viralforce-${(videoTitle || "clipes").toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40)}.txt`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
 function Index() {
   const [transcript, setTranscript] = useState("");
   const [videoTitle, setVideoTitle] = useState("");
