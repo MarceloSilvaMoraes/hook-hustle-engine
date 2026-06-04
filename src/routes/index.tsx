@@ -361,11 +361,10 @@ function Index() {
                   </button>
 
                   <button
-                    onClick={() => renderMutation.mutate()}
-                    disabled={!canCreateJob}
-                    className="font-display text-xs uppercase tracking-widest bg-primary text-primary-foreground px-4 py-2 rounded-lg transition-all hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed"
+                    disabled
+                    className="font-display text-xs uppercase tracking-widest bg-primary text-primary-foreground px-4 py-2 rounded-lg transition-all opacity-70 cursor-not-allowed"
                   >
-                    {renderMutation.isPending ? "Criando job..." : "Renderizar no meu PC"}
+                    Inserir no YouTube
                   </button>
                 </div>
               )}
@@ -378,7 +377,7 @@ function Index() {
                     <p className="text-xs uppercase tracking-widest text-muted-foreground">Local render worker</p>
                     <h3 className="font-display text-2xl mt-2">Crie o job e deixe o worker rodar</h3>
                     <p className="mt-2 text-sm text-muted-foreground max-w-2xl">
-                      O job é enviado para o banco. O worker local baixa o vídeo, corta os clipes e salva o MP4 no seu diretório.
+                      A publicação automática no YouTube será habilitada quando as credenciais do canal estiverem prontas.
                     </p>
                   </div>
                   <div className="space-y-2 text-right">
@@ -401,7 +400,7 @@ function Index() {
                   </div>
                   <div className="rounded-2xl border border-border bg-background p-4">
                     <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Status</div>
-                    <div className="mt-2 font-semibold">{canCreateJob ? "Pronto" : "Informe o link"}</div>
+                    <div className="mt-2 font-semibold">Aguardando credenciais do YouTube</div>
                   </div>
                 </div>
                 {!sourceUrl.trim() && (

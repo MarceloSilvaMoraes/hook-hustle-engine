@@ -24,6 +24,11 @@ SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or os.environ.get("SU
 OUTPUT_DIR = Path(os.environ.get("CLIP_WORKER_OUTPUT_DIR", "~/Videos/clipes")).expanduser()
 POLL_SECONDS = int(os.environ.get("CLIP_WORKER_POLL_SECONDS", "15"))
 WORKER_ID = os.environ.get("CLIP_WORKER_ID", f"local-worker-{os.getpid()}")
+YOUTUBE_AUTO_PUBLISH = os.environ.get("YOUTUBE_AUTO_PUBLISH", "false").lower() in ("1", "true", "yes", "on")
+YOUTUBE_CLIENT_ID = os.environ.get("YOUTUBE_CLIENT_ID")
+YOUTUBE_CLIENT_SECRET = os.environ.get("YOUTUBE_CLIENT_SECRET")
+YOUTUBE_REFRESH_TOKEN = os.environ.get("YOUTUBE_REFRESH_TOKEN")
+YOUTUBE_PRIVACY_STATUS = os.environ.get("YOUTUBE_PRIVACY_STATUS", "private")
 
 if not SUPABASE_URL or not SUPABASE_KEY:
     print("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY / SUPABASE_ANON_KEY in environment.")
@@ -65,6 +70,55 @@ def update_job(job_id: str, updates: dict) -> None:
     url = f"{SUPABASE_URL}/rest/v1/{JOB_TABLE}?id=eq.{job_id}"
     response = request("PATCH", url, headers=HEADERS, data=json.dumps(updates))
     response.raise_for_status()
+
+
+def get_youtube_service():
+    if not YOUTUBE_AUTO_PUBLISH:
+        return None
+    if not all([YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, YOUTUBE_REFRESH_TOKEN]):
+        return None
+
+    from google.oauth2.credentials import Credentials
+    from googleapiclient.discovery import build
+
+    credentials = Credentials(
+        token=None,
+        refresh_token=YOUTUBE_REFRESH_TOKEN,
+        client_id=YOUTUBE_CLIENT_ID,
+        client_secret=YOUTUBE_CLIENT_SECRET,
+        token_uri="https://oauth2.googleapis.com/token",
+    )
+    return build("youtube", "v3", credentials=credentials)
+
+
+def upload_clip_to_youtube(file_path: Path, clip: dict) -> str:
+    service = get_youtube_service()
+    if service is None:
+        raise RuntimeError("YouTube auto-publish não está configurado. Defina YOUTUBE_AUTO_PUBLISH e as credenciais do Google.")
+
+    from googleapiclient.http import MediaFileUpload
+
+    title = (clip.get("title") or "Clip gerado pelo Hook Hustle Engine").strip()[:100]
+    description = (clip.get("hookQuote") or clip.get("justification") or "Clip gerado automaticamente.").strip()[:5000]
+    tags = [tag.strip() for tag in (clip.get("triggers") or []) if tag and tag.strip()][:50]
+
+    body = {
+        "snippet": {
+            "title": title,
+            "description": description,
+            "tags": tags,
+            "categoryId": "22",
+        },
+        "status": {
+            "privacyStatus": YOUTUBE_PRIVACY_STATUS,
+            "selfDeclaredMadeForKids": False,
+        },
+    }
+
+    media = MediaFileUpload(str(file_path), chunksize=-1, resumable=True, mimetype="video/mp4")
+    request = service.videos().insert(part="snippet,status", body=body, media_body=media)
+    response = request.execute()
+    return f"https://www.youtube.com/watch?v={response['id']}"
 
 
 def sanitize_filename(text: str) -> str:
@@ -155,12 +209,23 @@ def run_worker() -> None:
             video_file = download_video(job["video_url"], workspace)
 
             rendered_files = []
+            youtube_links = []
             clip_items = job.get("clip_items") or []
             for clip in clip_items:
                 rendered = render_clip(video_file, clip, OUTPUT_DIR)
                 rendered_files.append(str(rendered))
 
+                if YOUTUBE_AUTO_PUBLISH:
+                    try:
+                        youtube_url = upload_clip_to_youtube(rendered, clip)
+                        youtube_links.append(youtube_url)
+                        print(f"Publicado no YouTube: {youtube_url}")
+                    except Exception as upload_exc:
+                        print("Falha ao publicar no YouTube:", upload_exc)
+
             output_paths = " | ".join(rendered_files) if rendered_files else str(OUTPUT_DIR)
+            if youtube_links:
+                output_paths = f"{output_paths} | YouTube: {' | '.join(youtube_links)}"
             update_job(job_id, {
                 "status": "done",
                 "output_path": output_paths,

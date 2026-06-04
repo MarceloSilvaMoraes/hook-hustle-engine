@@ -31,7 +31,7 @@ No Lovable, configure as variáveis de ambiente:
 Instale as dependências do Python:
 
 ```bash
-python -m pip install requests python-dotenv
+python -m pip install requests python-dotenv google-api-python-client google-auth-oauthlib google-auth-httplib2
 ```
 
 Coloque um arquivo `.env` próximo a `worker.py` com:
@@ -41,6 +41,11 @@ SUPABASE_URL=https://<seu-projeto>.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
 CLIP_WORKER_OUTPUT_DIR=~/Videos/clipes
 CLIP_WORKER_POLL_SECONDS=15
+YOUTUBE_AUTO_PUBLISH=false
+YOUTUBE_CLIENT_ID=<client-id-do-google>
+YOUTUBE_CLIENT_SECRET=<client-secret-do-google>
+YOUTUBE_REFRESH_TOKEN=<refresh-token-do-oauth>
+YOUTUBE_PRIVACY_STATUS=private
 ```
 
 Execute:
