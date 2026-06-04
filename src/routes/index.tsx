@@ -204,6 +204,13 @@ function Index() {
 
   useEffect(() => {
     const savedClientId = typeof window !== "undefined" ? localStorage.getItem("youtube_client_id") || "" : "";
+
+    if (savedClientId && !isValidGoogleClientId(savedClientId)) {
+      localStorage.removeItem("youtube_client_id");
+      setGoogleClientId("");
+      return;
+    }
+
     setGoogleClientId(savedClientId);
   }, []);
 
@@ -219,7 +226,9 @@ function Index() {
     }
 
     if (!isValidGoogleClientId(clientId)) {
-      toast.error("Client ID inválido. Use um OAuth Client do tipo Web application do Google Cloud Console.");
+      localStorage.removeItem("youtube_client_id");
+      setGoogleClientId("");
+      toast.error("Client ID inválido ou antigo. Cole um OAuth Client ID válido do Google Cloud Console e tente novamente.");
       return;
     }
 
