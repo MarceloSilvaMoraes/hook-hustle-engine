@@ -113,6 +113,8 @@ function Index() {
   const [videoId, setVideoId] = useState("");
   const [jobs, setJobs] = useState<RenderJob[]>([]);
   const [googleClientId, setGoogleClientId] = useState("");
+  const [googleClientSecret, setGoogleClientSecret] = useState("");
+  const [redirectUri, setRedirectUri] = useState("/youtube-callback");
   const [playing, setPlaying] = useState<{ start: number; end: number; title: string } | null>(null);
 
   const analyze = useServerFn(analyzeTranscript);
@@ -203,15 +205,20 @@ function Index() {
   }, []);
 
   useEffect(() => {
-    const savedClientId = typeof window !== "undefined" ? localStorage.getItem("youtube_client_id") || "" : "";
+    if (typeof window === "undefined") return;
+
+    const savedClientId = localStorage.getItem("youtube_client_id") || "";
+    const savedClientSecret = localStorage.getItem("youtube_client_secret") || "";
 
     if (savedClientId && !isValidGoogleClientId(savedClientId)) {
       localStorage.removeItem("youtube_client_id");
       setGoogleClientId("");
-      return;
+    } else {
+      setGoogleClientId(savedClientId);
     }
 
-    setGoogleClientId(savedClientId);
+    setGoogleClientSecret(savedClientSecret);
+    setRedirectUri(`${window.location.origin}/youtube-callback`);
   }, []);
 
   const canAnalyze = transcript.trim().length >= 50 && !mutation.isPending;
@@ -237,20 +244,23 @@ function Index() {
     window.location.assign(url);
   };
 
-  const handleSaveGoogleClientId = () => {
+  const handleSaveGoogleCredentials = () => {
     const value = googleClientId.trim();
-    if (!value) {
-      toast.error("Cole o Client ID do Google antes de salvar.");
+    const secret = googleClientSecret.trim();
+
+    if (!value || !secret) {
+      toast.error("Cole o Client ID e o Client Secret do Google antes de salvar.");
       return;
     }
 
     if (!isValidGoogleClientId(value)) {
-      toast.error("O valor informado não parece ser um Client ID válido do Google.");
+      toast.error("O Client ID informado não parece ser válido para OAuth do Google.");
       return;
     }
 
     localStorage.setItem("youtube_client_id", value);
-    toast.success("Client ID do Google salvo localmente.");
+    localStorage.setItem("youtube_client_secret", secret);
+    toast.success("Credenciais do Google salvas localmente.");
   };
 
   return (
@@ -336,21 +346,28 @@ function Index() {
                   type="text"
                   value={googleClientId}
                   onChange={(e) => setGoogleClientId(e.target.value)}
-                  placeholder="Cole o Client ID do Google OAuth"
+                  placeholder="Client ID do OAuth Web App"
+                  className="flex-1 bg-background border border-border rounded-lg px-3 py-2 text-xs font-mono outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                />
+                <input
+                  type="password"
+                  value={googleClientSecret}
+                  onChange={(e) => setGoogleClientSecret(e.target.value)}
+                  placeholder="Client Secret do OAuth Web App"
                   className="flex-1 bg-background border border-border rounded-lg px-3 py-2 text-xs font-mono outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                 />
                 <button
                   type="button"
-                  onClick={handleSaveGoogleClientId}
+                  onClick={handleSaveGoogleCredentials}
                   className="border border-primary/40 text-primary hover:bg-primary hover:text-primary-foreground px-4 py-2 rounded-lg text-[10px] uppercase tracking-widest font-display transition-colors"
                 >
-                  Salvar Client ID
+                  Salvar credenciais
                 </button>
               </div>
               <p className="mt-2 text-[10px] font-mono uppercase tracking-widest text-muted-foreground/70">
                 Use um OAuth Client do tipo Web application e adicione esta URI de redirecionamento no Google Cloud Console:
                 {" "}
-                <span className="text-primary">{typeof window !== "undefined" ? `${window.location.origin}/youtube-callback` : "/youtube-callback"}</span>
+                <span className="text-primary">{redirectUri}</span>
               </p>
               <p className="mt-1 text-[10px] font-mono uppercase tracking-widest text-muted-foreground/70">
                 Se o login falhar, verifique também o GOOGLE_CLIENT_SECRET no servidor do OAuth.

@@ -29,7 +29,17 @@ function YoutubeCallback() {
 
     void (async () => {
       try {
-        const result = await exchange({ data: { code, redirectUri: `${window.location.origin}/youtube-callback` } });
+        const clientId = localStorage.getItem("youtube_client_id") || "";
+        const clientSecret = localStorage.getItem("youtube_client_secret") || "";
+
+        const result = await exchange({
+          data: {
+            code,
+            redirectUri: `${window.location.origin}/youtube-callback`,
+            clientId,
+            clientSecret,
+          },
+        });
         if (!result.ok) {
           setStatus(result.error || "Erro ao trocar o código de autorização.");
           return;

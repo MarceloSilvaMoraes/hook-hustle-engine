@@ -4,13 +4,15 @@ import { z } from "zod";
 const ExchangeCodeInput = z.object({
   code: z.string().min(1),
   redirectUri: z.string().url(),
+  clientId: z.string().min(1).optional(),
+  clientSecret: z.string().min(1).optional(),
 });
 
 export const exchangeYoutubeCode = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => ExchangeCodeInput.parse(data))
   .handler(async ({ data }) => {
-    const clientId = (process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID || "").trim();
-    const clientSecret = (process.env.GOOGLE_CLIENT_SECRET || "").trim();
+    const clientId = (data.clientId || process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID || "").trim();
+    const clientSecret = (data.clientSecret || process.env.GOOGLE_CLIENT_SECRET || "").trim();
 
     if (!clientId || !clientSecret) {
       return {
