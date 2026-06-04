@@ -99,6 +99,10 @@ function exportInstructions(clips: ViralClip[], videoTitle: string, videoId: str
   URL.revokeObjectURL(a.href);
 }
 
+function isValidGoogleClientId(value: string) {
+  return /^[0-9]+-[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$/.test(value.trim());
+}
+
 function Index() {
   const [transcript, setTranscript] = useState("");
   const [videoTitle, setVideoTitle] = useState("");
@@ -214,6 +218,11 @@ function Index() {
       return;
     }
 
+    if (!isValidGoogleClientId(clientId)) {
+      toast.error("Client ID inválido. Use um OAuth Client do tipo Web application do Google Cloud Console.");
+      return;
+    }
+
     localStorage.setItem("youtube_client_id", clientId.trim());
     const url = buildYoutubeAuthUrl();
     window.location.assign(url);
@@ -223,6 +232,11 @@ function Index() {
     const value = googleClientId.trim();
     if (!value) {
       toast.error("Cole o Client ID do Google antes de salvar.");
+      return;
+    }
+
+    if (!isValidGoogleClientId(value)) {
+      toast.error("O valor informado não parece ser um Client ID válido do Google.");
       return;
     }
 
@@ -294,9 +308,15 @@ function Index() {
                 <button
                   type="button"
                   onClick={handleConnectYoutube}
-                  className="font-display text-xs uppercase tracking-widest bg-primary text-primary-foreground px-4 py-2 rounded-lg transition-all hover:bg-primary/90"
+                  className="inline-flex items-center gap-2 rounded-xl border border-border bg-white text-slate-900 px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.18em] shadow-sm transition-all hover:-translate-y-0.5 hover:bg-slate-100"
                 >
-                  Entrar na conta do YouTube
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                    <path fill="#FBBC05" d="M5.84 13.94c-.22-.66-.35-1.36-.35-2.08s.13-1.42.35-2.08V6.94H2.18C1.43 8.31 1 9.88 1 11.5s.43 3.19 1.18 4.56l4.66-2.12z" />
+                    <path fill="#EA4335" d="M12 5.98c1.61 0 3.05.55 4.18 1.63l3.13-3.13C17.45 2.99 14.97 2 12 2 7.7 2 3.99 4.47 2.18 7.44l3.66 2.84C6.71 7.91 9.14 5.98 12 5.98z" />
+                  </svg>
+                  Continuar com Google
                 </button>
                 <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground/80">
                   Abre a tela de login do Google para escolher sua conta manualmente.
@@ -319,6 +339,11 @@ function Index() {
                 </button>
               </div>
               <p className="mt-2 text-[10px] font-mono uppercase tracking-widest text-muted-foreground/70">
+                Use um OAuth Client do tipo Web application e adicione esta URI de redirecionamento no Google Cloud Console:
+                {" "}
+                <span className="text-primary">{typeof window !== "undefined" ? `${window.location.origin}/youtube-callback` : "/youtube-callback"}</span>
+              </p>
+              <p className="mt-1 text-[10px] font-mono uppercase tracking-widest text-muted-foreground/70">
                 Se o login falhar, verifique também o GOOGLE_CLIENT_SECRET no servidor do OAuth.
               </p>
             </div>
@@ -427,9 +452,15 @@ function Index() {
                   <button
                     type="button"
                     onClick={handleConnectYoutube}
-                    className="font-display text-xs uppercase tracking-widest bg-primary text-primary-foreground px-5 py-3 rounded-xl transition-all hover:bg-primary/95 shadow-[0_10px_24px_-12px_rgba(120,119,198,0.9)] hover:shadow-[0_14px_30px_-10px_rgba(120,119,198,1)] ring-1 ring-primary/40"
+                    className="inline-flex items-center gap-2 rounded-xl border border-border bg-white text-slate-900 px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] shadow-sm transition-all hover:-translate-y-0.5 hover:bg-slate-100"
                   >
-                    Conectar conta do YouTube
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                      <path fill="#FBBC05" d="M5.84 13.94c-.22-.66-.35-1.36-.35-2.08s.13-1.42.35-2.08V6.94H2.18C1.43 8.31 1 9.88 1 11.5s.43 3.19 1.18 4.56l4.66-2.12z" />
+                      <path fill="#EA4335" d="M12 5.98c1.61 0 3.05.55 4.18 1.63l3.13-3.13C17.45 2.99 14.97 2 12 2 7.7 2 3.99 4.47 2.18 7.44l3.66 2.84C6.71 7.91 9.14 5.98 12 5.98z" />
+                    </svg>
+                    Continuar com Google
                   </button>
                 </div>
               )}
