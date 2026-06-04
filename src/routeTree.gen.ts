@@ -9,8 +9,14 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as YoutubeCallbackRouteImport } from './routes/youtube-callback'
 import { Route as IndexRouteImport } from './routes/index'
 
+const YoutubeCallbackRoute = YoutubeCallbackRouteImport.update({
+  id: '/youtube-callback',
+  path: '/youtube-callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -19,28 +25,39 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/youtube-callback': typeof YoutubeCallbackRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/youtube-callback': typeof YoutubeCallbackRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/youtube-callback': typeof YoutubeCallbackRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/youtube-callback'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/youtube-callback'
+  id: '__root__' | '/' | '/youtube-callback'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  YoutubeCallbackRoute: typeof YoutubeCallbackRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/youtube-callback': {
+      id: '/youtube-callback'
+      path: '/youtube-callback'
+      fullPath: '/youtube-callback'
+      preLoaderRoute: typeof YoutubeCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -53,6 +70,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  YoutubeCallbackRoute: YoutubeCallbackRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

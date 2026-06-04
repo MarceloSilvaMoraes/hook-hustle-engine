@@ -8,6 +8,7 @@ import { fetchTranscript } from "@/lib/transcript.functions";
 import { createRenderJob, listRenderJobs, type RenderJob } from "@/lib/render-jobs.functions";
 import { ClipCard } from "@/components/ClipCard";
 import { Toaster } from "@/components/ui/sonner";
+import { buildYoutubeAuthUrl } from "@/lib/youtube-auth.functions";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -199,6 +200,18 @@ function Index() {
   const canAnalyze = transcript.trim().length >= 50 && !mutation.isPending;
   const canCreateJob = clips.length > 0 && sourceUrl.trim().length > 0 && !renderMutation.isPending;
 
+  const handleConnectYoutube = () => {
+    const clientId = (typeof window !== "undefined" ? localStorage.getItem("youtube_client_id") : "") || (process.env.VITE_GOOGLE_CLIENT_ID || "");
+
+    if (!clientId.trim()) {
+      toast.error("Configure VITE_GOOGLE_CLIENT_ID para habilitar o login do YouTube.");
+      return;
+    }
+
+    const url = buildYoutubeAuthUrl();
+    window.location.assign(url);
+  };
+
   return (
     <div className="min-h-screen bg-background text-foreground font-body selection:bg-primary selection:text-white">
       <Toaster theme="dark" />
@@ -257,6 +270,18 @@ function Index() {
               >
                 {fetchMutation.isPending ? "Buscando..." : "Importar"}
               </button>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 mb-4 rounded-xl border border-primary/20 bg-primary/5 p-4">
+              <button
+                type="button"
+                onClick={handleConnectYoutube}
+                className="font-display text-xs uppercase tracking-widest bg-primary text-primary-foreground px-4 py-2 rounded-lg transition-all hover:bg-primary/90"
+              >
+                Entrar na conta do YouTube
+              </button>
+              <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground/80">
+                Abre a tela de login do Google para escolher sua conta manualmente.
+              </p>
             </div>
             <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground/60 mb-4">
               YouTube/Shorts via legenda automática · TikTok/Reels/X: cole a transcrição manualmente abaixo
@@ -361,10 +386,11 @@ function Index() {
                   </button>
 
                   <button
-                    disabled
-                    className="font-display text-xs uppercase tracking-widest bg-primary text-primary-foreground px-4 py-2 rounded-lg transition-all opacity-70 cursor-not-allowed"
+                    type="button"
+                    onClick={handleConnectYoutube}
+                    className="font-display text-xs uppercase tracking-widest bg-primary text-primary-foreground px-4 py-2 rounded-lg transition-all hover:bg-primary/90"
                   >
-                    Inserir no YouTube
+                    Conectar conta do YouTube
                   </button>
                 </div>
               )}
