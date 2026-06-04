@@ -95,9 +95,30 @@ const RESPONSE_SCHEMA = {
 export const analyzeTranscript = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => InputSchema.parse(data))
   .handler(async ({ data }): Promise<ClipAnalysisResult> => {
-    const apiKey = process.env.LOVABLE_API_KEY;
-    if (!apiKey) {
-      return { clips: [], error: "LOVABLE_API_KEY não configurada." };
+    const lovableKey = (process.env.LOVABLE_API_KEY || process.env.VITE_LOVABLE_API_KEY || "").trim();
+    const openAiKey = (process.env.OPENAI_API_KEY || process.env.VITE_OPENAI_API_KEY || "").trim();
+
+    const aiConfig = lovableKey && !lovableKey.includes("COLOQUE_SUA_CHAVE_AQUI") && !lovableKey.includes("SEU_TOKEN_AQUI")
+      ? {
+          provider: "lovable" as const,
+          apiKey: lovableKey,
+          endpoint: "https://ai.gateway.lovable.dev/v1/chat/completions",
+          model: "google/gemini-2.5-flash",
+        }
+      : openAiKey
+        ? {
+            provider: "openai" as const,
+            apiKey: openAiKey,
+            endpoint: "https://api.openai.com/v1/chat/completions",
+            model: "gpt-4o-mini",
+          }
+        : null;
+
+    if (!aiConfig) {
+      return {
+        clips: [],
+        error: "Nenhuma chave de IA válida está configurada. Defina LOVABLE_API_KEY ou OPENAI_API_KEY no arquivo .env antes de analisar o conteúdo.",
+      };
     }
 
     const userPrompt = `VÍDEO: "${data.videoTitle || "Sem título"}"
@@ -110,14 +131,14 @@ ${data.transcript}
 Extraia os 5 melhores clipes virais (30-60s) com timestamps, score, justificativa e direção visual.`;
 
     try {
-      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      const response = await fetch(aiConfig.endpoint, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${apiKey}`,
+          Authorization: `Bearer ${aiConfig.apiKey}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
+          model: aiConfig.model,
           messages: [
             { role: "system", content: SYSTEM_PROMPT },
             { role: "user", content: userPrompt },
@@ -140,7 +161,7 @@ Extraia os 5 melhores clipes virais (30-60s) com timestamps, score, justificativ
         return { clips: [], error: "Limite de requisições atingido. Tente novamente em alguns instantes." };
       }
       if (response.status === 402) {
-        return { clips: [], error: "Créditos esgotados. Adicione créditos em Settings → Workspace → Usage." };
+        return { clips: [], error: "Créditos esgotados. Abra Settings → Workspace → Billing and usage para recarregar créditos." };
       }
       if (!response.ok) {
         const text = await response.text();

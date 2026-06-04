@@ -98,7 +98,7 @@ def download_video(video_url: str, destination: Path) -> Path:
 def build_ffmpeg_filters() -> str:
     return (
         "scale='if(gt(a,9/16),1080,-2)':'if(gt(a,9/16),-2,1920)',"
-        "crop=1080:1920"
+        "pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black"
     )
 
 
@@ -156,13 +156,14 @@ def run_worker() -> None:
 
             rendered_files = []
             clip_items = job.get("clip_items") or []
-            for index, clip in enumerate(clip_items, start=1):
-                rendered = render_clip(workspace, clip, OUTPUT_DIR)
+            for clip in clip_items:
+                rendered = render_clip(video_file, clip, OUTPUT_DIR)
                 rendered_files.append(str(rendered))
 
+            output_paths = " | ".join(rendered_files) if rendered_files else str(OUTPUT_DIR)
             update_job(job_id, {
                 "status": "done",
-                "output_path": str(OUTPUT_DIR),
+                "output_path": output_paths,
                 "completed_at": datetime.utcnow().isoformat() + "Z",
                 "error_message": None,
             })

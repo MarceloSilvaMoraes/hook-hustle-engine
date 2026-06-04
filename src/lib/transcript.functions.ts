@@ -39,8 +39,8 @@ function normalizeTranscriptError(error: unknown): string {
     if (message.includes("Transcript is disabled")) {
       return "Transcrição automática desativada neste vídeo. Cole a transcrição manualmente.";
     }
-    if (message.includes("Unable to find a transcript") || message.includes("No transcript found")) {
-      return "Nenhuma transcrição encontrada para este vídeo.";
+    if (message.includes("Unable to find a transcript") || message.includes("No transcript found") || message.includes("No transcripts are available")) {
+      return "Nenhuma transcrição disponível para este vídeo. Cole a transcrição manualmente ou use outro link com legendas.";
     }
     if (message.includes("Video unavailable") || message.includes("video unavailable")) {
       return "Vídeo indisponível ou removido no YouTube.";
@@ -48,6 +48,26 @@ function normalizeTranscriptError(error: unknown): string {
     return message;
   }
   return "Falha ao buscar transcrição.";
+}
+
+async function fetchTranscriptWithFallback(ytId: string) {
+  const languageCandidates = ["pt", "pt-BR", "en", "en-US"];
+
+  for (const lang of languageCandidates) {
+    try {
+      const segments = await YoutubeTranscript.fetchTranscript(ytId, { lang });
+      if (segments?.length) {
+        return segments;
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!message.includes("No transcripts are available") && !message.includes("Unable to find a transcript")) {
+        continue;
+      }
+    }
+  }
+
+  return YoutubeTranscript.fetchTranscript(ytId).catch(() => [] as never[]);
 }
 
 export const fetchTranscript = createServerFn({ method: "POST" })
@@ -74,17 +94,15 @@ export const fetchTranscript = createServerFn({ method: "POST" })
     }
 
     try {
-      const segments = await YoutubeTranscript.fetchTranscript(ytId, { lang: "pt" }).catch(() =>
-        YoutubeTranscript.fetchTranscript(ytId),
-      );
+      const segments = await fetchTranscriptWithFallback(ytId);
 
       if (!segments || segments.length === 0) {
         return {
           transcript: "",
           videoTitle: "",
           videoId: ytId ?? "",
-        source: "youtube",
-          error: "Vídeo sem legendas disponíveis.",
+          source: "youtube",
+          error: "Vídeo sem legendas disponíveis. Cole a transcrição manualmente para continuar.",
         };
       }
 
