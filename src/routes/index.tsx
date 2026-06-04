@@ -108,6 +108,7 @@ function Index() {
   const [sourceUrl, setSourceUrl] = useState("");
   const [videoId, setVideoId] = useState("");
   const [jobs, setJobs] = useState<RenderJob[]>([]);
+  const [googleClientId, setGoogleClientId] = useState("");
   const [playing, setPlaying] = useState<{ start: number; end: number; title: string } | null>(null);
 
   const analyze = useServerFn(analyzeTranscript);
@@ -197,19 +198,36 @@ function Index() {
     return () => window.clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    const savedClientId = typeof window !== "undefined" ? localStorage.getItem("youtube_client_id") || "" : "";
+    setGoogleClientId(savedClientId);
+  }, []);
+
   const canAnalyze = transcript.trim().length >= 50 && !mutation.isPending;
   const canCreateJob = clips.length > 0 && sourceUrl.trim().length > 0 && !renderMutation.isPending;
 
   const handleConnectYoutube = () => {
-    const clientId = (typeof window !== "undefined" ? localStorage.getItem("youtube_client_id") : "") || (process.env.VITE_GOOGLE_CLIENT_ID || "");
+    const clientId = googleClientId.trim() || (typeof window !== "undefined" ? localStorage.getItem("youtube_client_id") : "") || (process.env.VITE_GOOGLE_CLIENT_ID || "");
 
     if (!clientId.trim()) {
-      toast.error("Configure VITE_GOOGLE_CLIENT_ID para habilitar o login do YouTube.");
+      toast.error("Informe o Client ID do Google para abrir o login do YouTube.");
       return;
     }
 
+    localStorage.setItem("youtube_client_id", clientId.trim());
     const url = buildYoutubeAuthUrl();
     window.location.assign(url);
+  };
+
+  const handleSaveGoogleClientId = () => {
+    const value = googleClientId.trim();
+    if (!value) {
+      toast.error("Cole o Client ID do Google antes de salvar.");
+      return;
+    }
+
+    localStorage.setItem("youtube_client_id", value);
+    toast.success("Client ID do Google salvo localmente.");
   };
 
   return (
@@ -271,16 +289,37 @@ function Index() {
                 {fetchMutation.isPending ? "Buscando..." : "Importar"}
               </button>
             </div>
-            <div className="flex flex-wrap items-center gap-3 mb-4 rounded-xl border border-primary/20 bg-primary/5 p-4">
-              <button
-                type="button"
-                onClick={handleConnectYoutube}
-                className="font-display text-xs uppercase tracking-widest bg-primary text-primary-foreground px-4 py-2 rounded-lg transition-all hover:bg-primary/90"
-              >
-                Entrar na conta do YouTube
-              </button>
-              <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground/80">
-                Abre a tela de login do Google para escolher sua conta manualmente.
+            <div className="mb-4 rounded-xl border border-primary/20 bg-primary/5 p-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleConnectYoutube}
+                  className="font-display text-xs uppercase tracking-widest bg-primary text-primary-foreground px-4 py-2 rounded-lg transition-all hover:bg-primary/90"
+                >
+                  Entrar na conta do YouTube
+                </button>
+                <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground/80">
+                  Abre a tela de login do Google para escolher sua conta manualmente.
+                </p>
+              </div>
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                <input
+                  type="text"
+                  value={googleClientId}
+                  onChange={(e) => setGoogleClientId(e.target.value)}
+                  placeholder="Cole o Client ID do Google OAuth"
+                  className="flex-1 bg-background border border-border rounded-lg px-3 py-2 text-xs font-mono outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                />
+                <button
+                  type="button"
+                  onClick={handleSaveGoogleClientId}
+                  className="border border-primary/40 text-primary hover:bg-primary hover:text-primary-foreground px-4 py-2 rounded-lg text-[10px] uppercase tracking-widest font-display transition-colors"
+                >
+                  Salvar Client ID
+                </button>
+              </div>
+              <p className="mt-2 text-[10px] font-mono uppercase tracking-widest text-muted-foreground/70">
+                Se o login falhar, verifique também o GOOGLE_CLIENT_SECRET no servidor do OAuth.
               </p>
             </div>
             <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground/60 mb-4">
@@ -356,7 +395,7 @@ function Index() {
               <button
                 onClick={() => mutation.mutate()}
                 disabled={!canAnalyze}
-                className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-display text-lg py-4 rounded-lg transition-all active:scale-[0.98] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                className="w-full bg-primary hover:bg-primary/95 text-primary-foreground font-display text-lg py-4 rounded-xl transition-all active:scale-[0.98] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_12px_30px_-12px_rgba(120,119,198,0.75)] hover:shadow-[0_18px_36px_-12px_rgba(120,119,198,0.95)] ring-1 ring-primary/40"
               >
                 {mutation.isPending ? "ANALISANDO..." : "ANALISAR CONTEÚDO"}
               </button>
@@ -388,7 +427,7 @@ function Index() {
                   <button
                     type="button"
                     onClick={handleConnectYoutube}
-                    className="font-display text-xs uppercase tracking-widest bg-primary text-primary-foreground px-4 py-2 rounded-lg transition-all hover:bg-primary/90"
+                    className="font-display text-xs uppercase tracking-widest bg-primary text-primary-foreground px-5 py-3 rounded-xl transition-all hover:bg-primary/95 shadow-[0_10px_24px_-12px_rgba(120,119,198,0.9)] hover:shadow-[0_14px_30px_-10px_rgba(120,119,198,1)] ring-1 ring-primary/40"
                   >
                     Conectar conta do YouTube
                   </button>
