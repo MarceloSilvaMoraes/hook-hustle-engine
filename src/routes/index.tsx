@@ -574,6 +574,17 @@ function Index() {
                       <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Saída</div>
                       <div className="mt-1 text-sm text-foreground break-words">{job.output_path || "Aguardando worker"}</div>
                     </div>
+                    <div className="flex flex-col gap-2 sm:items-end">
+                      <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Publicação</div>
+                      <button
+                        type="button"
+                        disabled={job.status !== "done"}
+                        className="font-display text-xs uppercase tracking-widest bg-primary text-primary-foreground px-4 py-2 rounded-lg transition-all hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        Inserir no YouTube
+                      </button>
+                      <span className="text-[10px] text-muted-foreground">Aguardando credenciais do canal.</span>
+                    </div>
                     {job.error_message && (
                       <div>
                         <div className="text-[10px] uppercase tracking-widest text-destructive">Erro</div>
