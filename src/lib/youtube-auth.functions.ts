@@ -54,8 +54,8 @@ export const exchangeYoutubeCode = createServerFn({ method: "POST" })
   });
 
 export function buildYoutubeAuthUrl() {
-  const clientId = (typeof window !== "undefined" ? localStorage.getItem("youtube_client_id") : "") || (process.env.VITE_GOOGLE_CLIENT_ID || "");
-  const redirectUri = `${window.location.origin}/youtube-callback`;
+  const clientId = (typeof window !== "undefined" ? localStorage.getItem("youtube_client_id") : "") || (typeof import.meta !== "undefined" ? import.meta.env.VITE_GOOGLE_CLIENT_ID || "" : process.env.VITE_GOOGLE_CLIENT_ID || "");
+  const redirectUri = typeof window !== "undefined" ? `${window.location.origin}/youtube-callback` : "http://localhost:8080/youtube-callback";
   const scope = encodeURIComponent("https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.force-ssl");
 
   return `https://accounts.google.com/o/oauth2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&access_type=offline&scope=${scope}&prompt=select_account%20consent&include_granted_scopes=true`;

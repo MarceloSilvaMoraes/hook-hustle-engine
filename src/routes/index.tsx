@@ -8,7 +8,6 @@ import { fetchTranscript } from "@/lib/transcript.functions";
 import { createRenderJob, listRenderJobs, type RenderJob } from "@/lib/render-jobs.functions";
 import { ClipCard } from "@/components/ClipCard";
 import { Toaster } from "@/components/ui/sonner";
-import { buildYoutubeAuthUrl } from "@/lib/youtube-auth.functions";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -99,8 +98,23 @@ function exportInstructions(clips: ViralClip[], videoTitle: string, videoId: str
   URL.revokeObjectURL(a.href);
 }
 
-function isValidGoogleClientId(value: string) {
-  return /^[0-9]+-[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$/.test(value.trim());
+declare global {
+  interface Window {
+    google?: {
+      accounts?: {
+        oauth2?: {
+          initCodeClient: (config: {
+            client_id: string;
+            scope: string;
+            ux_mode: "popup";
+            redirect_uri: string;
+            prompt?: string;
+            callback: (response: { code?: string; error?: string }) => void;
+          }) => { requestCode: () => void };
+        };
+      };
+    };
+  }
 }
 
 function Index() {
@@ -112,9 +126,8 @@ function Index() {
   const [sourceUrl, setSourceUrl] = useState("");
   const [videoId, setVideoId] = useState("");
   const [jobs, setJobs] = useState<RenderJob[]>([]);
-  const [googleClientId, setGoogleClientId] = useState("");
-  const [googleClientSecret, setGoogleClientSecret] = useState("");
-  const [redirectUri, setRedirectUri] = useState("/youtube-callback");
+  const [gsiReady, setGsiReady] = useState(false);
+  const [redirectUri, setRedirectUri] = useState("http://localhost:8080/youtube-callback");
   const [playing, setPlaying] = useState<{ start: number; end: number; title: string } | null>(null);
 
   const analyze = useServerFn(analyzeTranscript);
@@ -207,60 +220,72 @@ function Index() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const savedClientId = localStorage.getItem("youtube_client_id") || "";
-    const savedClientSecret = localStorage.getItem("youtube_client_secret") || "";
+    setRedirectUri(`${window.location.origin}/youtube-callback`);
 
-    if (savedClientId && !isValidGoogleClientId(savedClientId)) {
-      localStorage.removeItem("youtube_client_id");
-      setGoogleClientId("");
-    } else {
-      setGoogleClientId(savedClientId);
+    const existing = document.querySelector("script[src='https://accounts.google.com/gsi/client']");
+    if (existing) {
+      setGsiReady(Boolean(window.google?.accounts?.oauth2?.initCodeClient));
+      return;
     }
 
-    setGoogleClientSecret(savedClientSecret);
-    setRedirectUri(`${window.location.origin}/youtube-callback`);
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.defer = true;
+    script.onload = () => setGsiReady(Boolean(window.google?.accounts?.oauth2?.initCodeClient));
+    document.head.appendChild(script);
+
+    return () => {
+      script.onload = null;
+    };
   }, []);
 
   const canAnalyze = transcript.trim().length >= 50 && !mutation.isPending;
   const canCreateJob = clips.length > 0 && sourceUrl.trim().length > 0 && !renderMutation.isPending;
 
   const handleConnectYoutube = () => {
-    const clientId = googleClientId.trim() || (typeof window !== "undefined" ? localStorage.getItem("youtube_client_id") : "") || (process.env.VITE_GOOGLE_CLIENT_ID || "");
+    const clientId = (import.meta.env.VITE_GOOGLE_CLIENT_ID || "").trim();
 
-    if (!clientId.trim()) {
-      toast.error("Informe o Client ID do Google para abrir o login do YouTube.");
+    if (!clientId) {
+      toast.error("Configure VITE_GOOGLE_CLIENT_ID no ambiente para abrir o login do Google.");
       return;
     }
 
-    if (!isValidGoogleClientId(clientId)) {
-      localStorage.removeItem("youtube_client_id");
-      setGoogleClientId("");
-      toast.error("Client ID inválido ou antigo. Cole um OAuth Client ID válido do Google Cloud Console e tente novamente.");
+    if (!gsiReady || !window.google?.accounts?.oauth2?.initCodeClient) {
+      toast.error("Aguarde o carregamento do Google Sign-In e tente novamente.");
       return;
     }
 
-    localStorage.setItem("youtube_client_id", clientId.trim());
-    const url = buildYoutubeAuthUrl();
-    window.location.assign(url);
-  };
+    const codeClient = window.google.accounts.oauth2.initCodeClient({
+      client_id: clientId,
+      scope: "openid email profile https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.force-ssl",
+      ux_mode: "popup",
+      redirect_uri: redirectUri,
+      prompt: "select_account consent",
+      callback: (response) => {
+        if (response.error) {
+          toast.error("O login com o Google foi cancelado ou falhou.");
+          return;
+        }
 
-  const handleSaveGoogleCredentials = () => {
-    const value = googleClientId.trim();
-    const secret = googleClientSecret.trim();
+        if (!response.code) {
+          toast.error("Nenhum código de autorização foi retornado pelo Google.");
+          return;
+        }
 
-    if (!value || !secret) {
-      toast.error("Cole o Client ID e o Client Secret do Google antes de salvar.");
-      return;
-    }
+        const popup = window.open(
+          `${window.location.origin}/youtube-callback?code=${encodeURIComponent(response.code)}`,
+          "google-oauth",
+          "width=520,height=720,noopener,noreferrer",
+        );
 
-    if (!isValidGoogleClientId(value)) {
-      toast.error("O Client ID informado não parece ser válido para OAuth do Google.");
-      return;
-    }
+        if (!popup) {
+          toast.error("Seu navegador bloqueou a janela de login do Google. Permita popups e tente novamente.");
+        }
+      },
+    });
 
-    localStorage.setItem("youtube_client_id", value);
-    localStorage.setItem("youtube_client_secret", secret);
-    toast.success("Credenciais do Google salvas localmente.");
+    codeClient.requestCode();
   };
 
   return (
@@ -341,31 +366,11 @@ function Index() {
                   Abre a tela de login do Google para escolher sua conta manualmente.
                 </p>
               </div>
-              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                <input
-                  type="text"
-                  value={googleClientId}
-                  onChange={(e) => setGoogleClientId(e.target.value)}
-                  placeholder="Client ID do OAuth Web App"
-                  className="flex-1 bg-background border border-border rounded-lg px-3 py-2 text-xs font-mono outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                />
-                <input
-                  type="password"
-                  value={googleClientSecret}
-                  onChange={(e) => setGoogleClientSecret(e.target.value)}
-                  placeholder="Client Secret do OAuth Web App"
-                  className="flex-1 bg-background border border-border rounded-lg px-3 py-2 text-xs font-mono outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                />
-                <button
-                  type="button"
-                  onClick={handleSaveGoogleCredentials}
-                  className="border border-primary/40 text-primary hover:bg-primary hover:text-primary-foreground px-4 py-2 rounded-lg text-[10px] uppercase tracking-widest font-display transition-colors"
-                >
-                  Salvar credenciais
-                </button>
-              </div>
               <p className="mt-2 text-[10px] font-mono uppercase tracking-widest text-muted-foreground/70">
-                Use um OAuth Client do tipo Web application e adicione esta URI de redirecionamento no Google Cloud Console:
+                O login agora usa a tela nativa do Google para escolher a conta, sem precisar digitar Client ID manualmente.
+              </p>
+              <p className="mt-1 text-[10px] font-mono uppercase tracking-widest text-muted-foreground/70">
+                Configure VITE_GOOGLE_CLIENT_ID no ambiente e adicione esta URI de redirecionamento no Google Cloud Console:
                 {" "}
                 <span className="text-primary">{redirectUri}</span>
               </p>
