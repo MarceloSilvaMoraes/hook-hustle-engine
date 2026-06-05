@@ -1,45 +1,25 @@
-import fs from "node:fs";
-import path from "node:path";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-
-function loadEnvFile(fileName: string) {
-  const filePath = path.resolve(process.cwd(), fileName);
-  if (!fs.existsSync(filePath)) return;
-
-  for (const rawLine of fs.readFileSync(filePath, "utf8").split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith("#") || !line.includes("=")) continue;
-
-    const separatorIndex = line.indexOf("=");
-    const key = line.slice(0, separatorIndex).trim();
-    let value = line.slice(separatorIndex + 1).trim();
-
-    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-      value = value.slice(1, -1);
-    }
-
-    if (typeof process.env[key] === "undefined") {
-      process.env[key] = value;
-    }
-  }
-}
-
-loadEnvFile(".env");
-loadEnvFile("env.env");
+import { getGoogleClientId } from "./youtube-auth.functions";
 
 const ExchangeCodeInput = z.object({
   code: z.string().min(1),
   redirectUri: z.string().url(),
-  clientId: z.string().min(1).optional(),
-  clientSecret: z.string().min(1).optional(),
 });
+
+function getServerCredentials() {
+  const clientId = (process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID || "").trim();
+  const clientSecret = (process.env.GOOGLE_CLIENT_SECRET || "").trim();
+  return {
+    clientId: clientId && clientId !== "test-client-id" ? clientId : getGoogleClientId(),
+    clientSecret,
+  };
+}
 
 export const exchangeYoutubeCode = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => ExchangeCodeInput.parse(data))
   .handler(async ({ data }) => {
-    const clientId = (data.clientId || process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID || "").trim();
-    const clientSecret = (data.clientSecret || process.env.GOOGLE_CLIENT_SECRET || "").trim();
+    const { clientId, clientSecret } = getServerCredentials();
 
     if (!clientId || !clientSecret) {
       return {

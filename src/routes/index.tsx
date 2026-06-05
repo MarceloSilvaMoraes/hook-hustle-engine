@@ -8,7 +8,8 @@ import { fetchTranscript } from "@/lib/transcript.functions";
 import { createRenderJob, listRenderJobs, type RenderJob } from "@/lib/render-jobs.functions";
 import { ClipCard } from "@/components/ClipCard";
 import { Toaster } from "@/components/ui/sonner";
-import { FALLBACK_GOOGLE_CLIENT_ID, resolveOAuthRedirectUri } from "@/lib/youtube-auth.functions";
+import { getGoogleClientId } from "@/lib/youtube-auth.functions";
+import { exchangeYoutubeCode } from "@/lib/youtube-auth.server";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -129,9 +130,11 @@ function Index() {
   const [jobs, setJobs] = useState<RenderJob[]>([]);
   const [gsiReady, setGsiReady] = useState(false);
   const [redirectUri, setRedirectUri] = useState("");
+  const [oauthStatus, setOauthStatus] = useState("Aguardando login do Google...");
   const [playing, setPlaying] = useState<{ start: number; end: number; title: string } | null>(null);
 
   const analyze = useServerFn(analyzeTranscript);
+  const exchange = useServerFn(exchangeYoutubeCode);
   const fetchT = useServerFn(fetchTranscript);
   const createJob = useServerFn(createRenderJob);
   const listJobs = useServerFn(listRenderJobs);
@@ -221,7 +224,7 @@ function Index() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    setRedirectUri(resolveOAuthRedirectUri(window.location.origin));
+    setRedirectUri(`${window.location.origin}/youtube-callback`);
 
     const existing = document.querySelector("script[src='https://accounts.google.com/gsi/client']");
     if (existing) {
@@ -245,10 +248,16 @@ function Index() {
   const canCreateJob = clips.length > 0 && sourceUrl.trim().length > 0 && !renderMutation.isPending;
 
   const handleConnectYoutube = () => {
-    const clientId = (import.meta.env.VITE_GOOGLE_CLIENT_ID || FALLBACK_GOOGLE_CLIENT_ID).trim();
+    const clientId = getGoogleClientId();
+    const effectiveRedirectUri = redirectUri || (typeof window !== "undefined" ? `${window.location.origin}/youtube-callback` : "");
 
     if (!clientId) {
       toast.error("Configure VITE_GOOGLE_CLIENT_ID no ambiente para abrir o login do Google.");
+      return;
+    }
+
+    if (!effectiveRedirectUri) {
+      toast.error("Não foi possível determinar a URI de redirecionamento. Recarregue a página e tente novamente.");
       return;
     }
 
@@ -261,9 +270,9 @@ function Index() {
       client_id: clientId,
       scope: "openid email profile https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.force-ssl",
       ux_mode: "popup",
-      redirect_uri: redirectUri,
+      redirect_uri: effectiveRedirectUri,
       prompt: "select_account consent",
-      callback: (response) => {
+      callback: async (response) => {
         if (response.error) {
           toast.error("O login com o Google foi cancelado ou falhou.");
           return;
@@ -274,7 +283,24 @@ function Index() {
           return;
         }
 
-        window.location.href = `${redirectUri}?code=${encodeURIComponent(response.code)}`;
+        setOauthStatus("Autenticando com o Google...");
+
+        const result = await exchange({
+          data: {
+            code: response.code,
+            redirectUri: effectiveRedirectUri,
+          },
+        });
+
+        if (!result.ok) {
+          const message = result.error || "Erro ao trocar o código de autorização.";
+          setOauthStatus(message);
+          toast.error(message);
+          return;
+        }
+
+        setOauthStatus("Autenticação concluída com sucesso.");
+        toast.success("Login do Google concluído.");
       },
     });
 
@@ -365,10 +391,13 @@ function Index() {
               <p className="mt-1 text-[10px] font-mono uppercase tracking-widest text-muted-foreground/70">
                 O login usa o Client ID real do Google Cloud Console. Confirme no console esta URI de redirecionamento:
                 {" "}
-                <span className="text-primary">{redirectUri || "http://localhost:8080/youtube-callback"}</span>
+                <span className="text-primary">{redirectUri || "Carregando URI de redirecionamento..."}</span>
               </p>
               <p className="mt-1 text-[10px] font-mono uppercase tracking-widest text-muted-foreground/70">
                 Se o login falhar, verifique também o GOOGLE_CLIENT_SECRET no servidor do OAuth.
+              </p>
+              <p className="mt-2 text-[10px] font-mono uppercase tracking-widest text-primary/80">
+                {oauthStatus}
               </p>
             </div>
             <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground/60 mb-4">

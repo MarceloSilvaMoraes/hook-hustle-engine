@@ -1,5 +1,20 @@
 
-export const FALLBACK_GOOGLE_CLIENT_ID = "60097047397-pkr5gq70r5r2h1hv01556eivnbaqd07h.apps.googleusercontent.com";
+export const DEFAULT_GOOGLE_CLIENT_ID = "60097047397-pkr5gq70r5r2h1hv01556eivnbaqd07h.apps.googleusercontent.com";
+
+export function getGoogleClientId() {
+  const configured = (
+    (typeof import.meta !== "undefined" ? import.meta.env.VITE_GOOGLE_CLIENT_ID : process.env.VITE_GOOGLE_CLIENT_ID) ||
+    process.env.GOOGLE_CLIENT_ID ||
+    ""
+  )
+    .trim();
+
+  if (!configured || configured === "test-client-id") {
+    return DEFAULT_GOOGLE_CLIENT_ID;
+  }
+
+  return configured;
+}
 
 export function resolveOAuthRedirectUri(origin?: string) {
   if (origin) return `${origin.replace(/\/$/, "")}/youtube-callback`;
@@ -10,11 +25,11 @@ export function resolveOAuthRedirectUri(origin?: string) {
 
   return process.env.NODE_ENV === "production"
     ? "https://hook-hustle-engine.lovable.app/youtube-callback"
-    : "http://localhost:8080/youtube-callback";
+    : "http://localhost:8081/youtube-callback";
 }
 
 export function buildYoutubeAuthUrl() {
-  const clientId = (typeof import.meta !== "undefined" ? import.meta.env.VITE_GOOGLE_CLIENT_ID || FALLBACK_GOOGLE_CLIENT_ID : process.env.VITE_GOOGLE_CLIENT_ID || FALLBACK_GOOGLE_CLIENT_ID);
+  const clientId = getGoogleClientId();
   const redirectUri = resolveOAuthRedirectUri(typeof window !== "undefined" ? window.location.origin : undefined);
   const scope = encodeURIComponent("https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.force-ssl");
 
