@@ -18,13 +18,15 @@ No seu projeto Supabase, execute `supabase/render_jobs.sql` ou cole o SQL no edi
 
 ### 2. Configurar o app web
 
-No Lovable, configure as variáveis de ambiente:
+No Lovable, configure as variáveis de ambiente do projeto (não na seção de Secrets reservados):
 
 - `SUPABASE_URL`
 - `SUPABASE_PUBLISHABLE_KEY`
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_PUBLISHABLE_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY` (para o worker local)
+
+> Importante: as variáveis que começam com `VITE_` são injetadas em tempo de build e devem estar configuradas no painel de variáveis de ambiente do Lovable ou em um arquivo de build, não em Secrets reservados.
 
 ### 3. Rodar o worker local
 
@@ -34,7 +36,7 @@ Instale as dependências do Python:
 python -m pip install requests python-dotenv google-api-python-client google-auth-oauthlib google-auth-httplib2
 ```
 
-Coloque um arquivo `.env` próximo a `worker.py` com:
+Copie `.env.example` para `.env` e preencha os valores de produção ou crie um arquivo `.env` próximo a `worker.py` com:
 
 ```text
 SUPABASE_URL=https://<seu-projeto>.supabase.co
