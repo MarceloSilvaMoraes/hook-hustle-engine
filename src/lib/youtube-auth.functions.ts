@@ -1,5 +1,32 @@
+import fs from "node:fs";
+import path from "node:path";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+
+function loadEnvFile(fileName: string) {
+  const filePath = path.resolve(process.cwd(), fileName);
+  if (!fs.existsSync(filePath)) return;
+
+  for (const rawLine of fs.readFileSync(filePath, "utf8").split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#") || !line.includes("=")) continue;
+
+    const separatorIndex = line.indexOf("=");
+    const key = line.slice(0, separatorIndex).trim();
+    let value = line.slice(separatorIndex + 1).trim();
+
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+
+    if (typeof process.env[key] === "undefined") {
+      process.env[key] = value;
+    }
+  }
+}
+
+loadEnvFile(".env");
+loadEnvFile("env.env");
 
 const ExchangeCodeInput = z.object({
   code: z.string().min(1),
@@ -53,9 +80,21 @@ export const exchangeYoutubeCode = createServerFn({ method: "POST" })
     };
   });
 
+export function resolveOAuthRedirectUri(origin?: string) {
+  if (origin) return `${origin.replace(/\/$/, "")}/youtube-callback`;
+
+  if (process.env.VITE_GOOGLE_REDIRECT_URI) {
+    return process.env.VITE_GOOGLE_REDIRECT_URI;
+  }
+
+  return process.env.NODE_ENV === "production"
+    ? "https://hook-hustle-engine.lovable.app/youtube-callback"
+    : "http://localhost:8080/youtube-callback";
+}
+
 export function buildYoutubeAuthUrl() {
   const clientId = (typeof window !== "undefined" ? localStorage.getItem("youtube_client_id") : "") || (typeof import.meta !== "undefined" ? import.meta.env.VITE_GOOGLE_CLIENT_ID || "" : process.env.VITE_GOOGLE_CLIENT_ID || "");
-  const redirectUri = typeof window !== "undefined" ? `${window.location.origin}/youtube-callback` : "http://localhost:8080/youtube-callback";
+  const redirectUri = resolveOAuthRedirectUri(typeof window !== "undefined" ? window.location.origin : undefined);
   const scope = encodeURIComponent("https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.force-ssl");
 
   return `https://accounts.google.com/o/oauth2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&access_type=offline&scope=${scope}&prompt=select_account%20consent&include_granted_scopes=true`;

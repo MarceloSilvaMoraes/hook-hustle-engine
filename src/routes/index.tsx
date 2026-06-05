@@ -8,6 +8,7 @@ import { fetchTranscript } from "@/lib/transcript.functions";
 import { createRenderJob, listRenderJobs, type RenderJob } from "@/lib/render-jobs.functions";
 import { ClipCard } from "@/components/ClipCard";
 import { Toaster } from "@/components/ui/sonner";
+import { resolveOAuthRedirectUri } from "@/lib/youtube-auth.functions";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -127,7 +128,7 @@ function Index() {
   const [videoId, setVideoId] = useState("");
   const [jobs, setJobs] = useState<RenderJob[]>([]);
   const [gsiReady, setGsiReady] = useState(false);
-  const [redirectUri, setRedirectUri] = useState("http://localhost:8080/youtube-callback");
+  const [redirectUri, setRedirectUri] = useState(() => resolveOAuthRedirectUri());
   const [playing, setPlaying] = useState<{ start: number; end: number; title: string } | null>(null);
 
   const analyze = useServerFn(analyzeTranscript);
@@ -220,7 +221,7 @@ function Index() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    setRedirectUri(`${window.location.origin}/youtube-callback`);
+    setRedirectUri(resolveOAuthRedirectUri(window.location.origin));
 
     const existing = document.querySelector("script[src='https://accounts.google.com/gsi/client']");
     if (existing) {
@@ -274,7 +275,7 @@ function Index() {
         }
 
         const popup = window.open(
-          `${window.location.origin}/youtube-callback?code=${encodeURIComponent(response.code)}`,
+          `${redirectUri.split("/youtube-callback")[0]}/youtube-callback?code=${encodeURIComponent(response.code)}`,
           "google-oauth",
           "width=520,height=720,noopener,noreferrer",
         );
