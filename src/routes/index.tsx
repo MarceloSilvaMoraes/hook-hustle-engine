@@ -8,7 +8,7 @@ import { fetchTranscript } from "@/lib/transcript.functions";
 import { createRenderJob, listRenderJobs, type RenderJob } from "@/lib/render-jobs.functions";
 import { ClipCard } from "@/components/ClipCard";
 import { Toaster } from "@/components/ui/sonner";
-import { resolveOAuthRedirectUri } from "@/lib/youtube-auth.functions";
+import { FALLBACK_GOOGLE_CLIENT_ID, resolveOAuthRedirectUri } from "@/lib/youtube-auth.functions";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -128,7 +128,7 @@ function Index() {
   const [videoId, setVideoId] = useState("");
   const [jobs, setJobs] = useState<RenderJob[]>([]);
   const [gsiReady, setGsiReady] = useState(false);
-  const [redirectUri, setRedirectUri] = useState(() => resolveOAuthRedirectUri());
+  const [redirectUri, setRedirectUri] = useState("");
   const [playing, setPlaying] = useState<{ start: number; end: number; title: string } | null>(null);
 
   const analyze = useServerFn(analyzeTranscript);
@@ -245,7 +245,7 @@ function Index() {
   const canCreateJob = clips.length > 0 && sourceUrl.trim().length > 0 && !renderMutation.isPending;
 
   const handleConnectYoutube = () => {
-    const clientId = (import.meta.env.VITE_GOOGLE_CLIENT_ID || "").trim();
+    const clientId = (import.meta.env.VITE_GOOGLE_CLIENT_ID || FALLBACK_GOOGLE_CLIENT_ID).trim();
 
     if (!clientId) {
       toast.error("Configure VITE_GOOGLE_CLIENT_ID no ambiente para abrir o login do Google.");
@@ -274,15 +274,7 @@ function Index() {
           return;
         }
 
-        const popup = window.open(
-          `${redirectUri.split("/youtube-callback")[0]}/youtube-callback?code=${encodeURIComponent(response.code)}`,
-          "google-oauth",
-          "width=520,height=720,noopener,noreferrer",
-        );
-
-        if (!popup) {
-          toast.error("Seu navegador bloqueou a janela de login do Google. Permita popups e tente novamente.");
-        }
+        window.location.href = `${redirectUri}?code=${encodeURIComponent(response.code)}`;
       },
     });
 
@@ -371,9 +363,9 @@ function Index() {
                 O login agora usa a tela nativa do Google para escolher a conta, sem precisar digitar Client ID manualmente.
               </p>
               <p className="mt-1 text-[10px] font-mono uppercase tracking-widest text-muted-foreground/70">
-                Configure VITE_GOOGLE_CLIENT_ID no ambiente e adicione esta URI de redirecionamento no Google Cloud Console:
+                O login usa o Client ID real do Google Cloud Console. Confirme no console esta URI de redirecionamento:
                 {" "}
-                <span className="text-primary">{redirectUri}</span>
+                <span className="text-primary">{redirectUri || "http://localhost:8080/youtube-callback"}</span>
               </p>
               <p className="mt-1 text-[10px] font-mono uppercase tracking-widest text-muted-foreground/70">
                 Se o login falhar, verifique também o GOOGLE_CLIENT_SECRET no servidor do OAuth.

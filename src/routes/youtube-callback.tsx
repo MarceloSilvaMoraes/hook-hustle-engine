@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
-import { exchangeYoutubeCode } from "@/lib/youtube-auth.functions";
+import { exchangeYoutubeCode } from "@/lib/youtube-auth.server";
 
 export const Route = createFileRoute("/youtube-callback")({
   component: YoutubeCallback,
