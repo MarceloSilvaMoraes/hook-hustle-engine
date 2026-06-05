@@ -4,7 +4,7 @@ import { getGoogleClientId } from "./youtube-auth.functions";
 
 const ExchangeCodeInput = z.object({
   code: z.string().min(1),
-  redirectUri: z.string().url(),
+  redirectUri: z.string().min(1),
 });
 
 function getServerCredentials() {

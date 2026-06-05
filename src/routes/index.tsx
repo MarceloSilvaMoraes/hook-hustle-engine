@@ -270,7 +270,7 @@ function Index() {
       client_id: clientId,
       scope: "openid email profile https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.force-ssl",
       ux_mode: "popup",
-      redirect_uri: effectiveRedirectUri,
+      redirect_uri: "postmessage",
       prompt: "select_account consent",
       callback: async (response) => {
         if (response.error) {
@@ -288,7 +288,7 @@ function Index() {
         const result = await exchange({
           data: {
             code: response.code,
-            redirectUri: effectiveRedirectUri,
+            redirectUri: "postmessage",
           },
         });
 
