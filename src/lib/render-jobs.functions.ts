@@ -31,7 +31,7 @@ const listRenderJobsInput = z.object({
   limit: z.number().int().min(1).max(50).optional().default(10),
 });
 
-const admin = supabaseAdmin as any;
+const admin = workerSupabase as any;
 
 export type RenderJob = RenderJobRow;
 
