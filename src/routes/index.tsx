@@ -8,7 +8,7 @@ import { fetchTranscript } from "@/lib/transcript.functions";
 import { createRenderJob, listRenderJobs, type RenderJob } from "@/lib/render-jobs.functions";
 import { ClipCard } from "@/components/ClipCard";
 import { Toaster } from "@/components/ui/sonner";
-import { getGoogleClientId } from "@/lib/youtube-auth.functions";
+import { getGoogleClientId, resolveOAuthRedirectUri } from "@/lib/youtube-auth.functions";
 import { exchangeYoutubeCode } from "@/lib/youtube-auth.server";
 
 export const Route = createFileRoute("/")({
@@ -274,7 +274,7 @@ function Index() {
 
   const handleConnectYoutube = () => {
     const clientId = getGoogleClientId();
-    const effectiveRedirectUri = redirectUri || (typeof window !== "undefined" ? `${window.location.origin}/youtube-callback` : "");
+    const effectiveRedirectUri = resolveOAuthRedirectUri(typeof window !== "undefined" ? window.location.origin : undefined);
 
     if (!clientId) {
       toast.error("Configure VITE_GOOGLE_CLIENT_ID no ambiente para abrir o login do Google.");
@@ -291,42 +291,14 @@ function Index() {
       return;
     }
 
+    setOauthStatus("Redirecionando para o Google...");
+
     const codeClient = window.google.accounts.oauth2.initCodeClient({
       client_id: clientId,
       scope: "openid email profile https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.force-ssl",
-      ux_mode: "popup",
-      redirect_uri: "postmessage",
+      ux_mode: "redirect",
+      redirect_uri: effectiveRedirectUri,
       prompt: "consent select_account",
-      callback: async (response) => {
-        if (response.error) {
-          toast.error("O login com o Google foi cancelado ou falhou.");
-          return;
-        }
-
-        if (!response.code) {
-          toast.error("Nenhum código de autorização foi retornado pelo Google.");
-          return;
-        }
-
-        setOauthStatus("Autenticando com o Google...");
-
-        const result = await exchange({
-          data: {
-            code: response.code,
-            redirectUri: "postmessage",
-          },
-        });
-
-        if (!result.ok) {
-          const message = result.error || "Erro ao trocar o código de autorização.";
-          setOauthStatus(message);
-          toast.error(message);
-          return;
-        }
-
-        setOauthStatus("Autenticação concluída com sucesso.");
-        toast.success("Login do Google concluído.");
-      },
     });
 
     codeClient.requestCode();

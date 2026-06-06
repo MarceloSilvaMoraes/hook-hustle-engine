@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
 import { exchangeYoutubeCode } from "@/lib/youtube-auth.server";
+import { resolveOAuthRedirectUri } from "@/lib/youtube-auth.functions";
 
 export const Route = createFileRoute("/youtube-callback")({
   component: YoutubeCallback,
@@ -32,7 +33,7 @@ function YoutubeCallback() {
         const result = await exchange({
           data: {
             code,
-            redirectUri: `${window.location.origin}/youtube-callback`,
+            redirectUri: resolveOAuthRedirectUri(window.location.origin),
           },
         });
         if (!result.ok) {
@@ -45,8 +46,12 @@ function YoutubeCallback() {
           window.localStorage.setItem("hook_hustle_youtube_refresh_token", refreshToken);
         }
 
-        setStatus("Autenticação concluída. Copie o refresh token abaixo para o seu .env e ative o worker local.");
+        setStatus("Autenticação concluída. Redirecionando de volta ao app...");
         setToken(refreshToken);
+
+        window.setTimeout(() => {
+          window.location.replace(window.location.origin);
+        }, 800);
       } catch (err) {
         setStatus(err instanceof Error ? err.message : "Erro inesperado durante a autenticação.");
       }

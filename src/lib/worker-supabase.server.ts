@@ -4,12 +4,21 @@
 import { createClient } from "@supabase/supabase-js";
 
 function createWorkerSupabase() {
-  const url = process.env.WORKER_SUPABASE_URL;
-  const key = process.env.WORKER_SUPABASE_SERVICE_ROLE_KEY;
+  const url =
+    process.env.WORKER_SUPABASE_URL ||
+    process.env.SUPABASE_URL ||
+    process.env.VITE_SUPABASE_URL ||
+    "";
+  const key =
+    process.env.WORKER_SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_ANON_KEY ||
+    "";
+
   if (!url || !key) {
     const missing = [
-      ...(!url ? ["WORKER_SUPABASE_URL"] : []),
-      ...(!key ? ["WORKER_SUPABASE_SERVICE_ROLE_KEY"] : []),
+      ...(!url ? ["WORKER_SUPABASE_URL / SUPABASE_URL / VITE_SUPABASE_URL"] : []),
+      ...(!key ? ["WORKER_SUPABASE_SERVICE_ROLE_KEY / SUPABASE_SERVICE_ROLE_KEY / SUPABASE_ANON_KEY"] : []),
     ];
     throw new Error(
       `Configuração do worker Supabase ausente: ${missing.join(", ")}. Adicione esses secrets.`,
