@@ -9,7 +9,13 @@ const ExchangeCodeInput = z.object({
 
 function getServerCredentials() {
   const clientId = (process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID || "").trim();
-  const clientSecret = (process.env.GOOGLE_CLIENT_SECRET || "").trim();
+  const clientSecret = (
+    process.env.GOOGLE_CLIENT_SECRET ||
+    process.env.VITE_GOOGLE_CLIENT_SECRET ||
+    (typeof import.meta !== "undefined" ? import.meta.env.VITE_GOOGLE_CLIENT_SECRET : undefined) ||
+    ""
+  ).trim();
+
   return {
     clientId: clientId && clientId !== "test-client-id" ? clientId : getGoogleClientId(),
     clientSecret,
