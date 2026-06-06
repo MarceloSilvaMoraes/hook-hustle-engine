@@ -35,6 +35,14 @@ const admin = supabaseAdmin as any;
 
 export type RenderJob = RenderJobRow;
 
+function formatRenderJobsError(error: { message?: string; details?: string; hint?: string } | null | undefined) {
+  const message = error?.message || error?.details || error?.hint || "Falha ao acessar a tabela render_jobs no Supabase.";
+  if (typeof message === "string" && message.toLowerCase().includes("could not find the table")) {
+    return "Tabela render_jobs não encontrada no Supabase. Execute supabase/render_jobs.sql no seu projeto Supabase.";
+  }
+  return message;
+}
+
 export const createRenderJob = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => createRenderJobInput.parse(data))
   .handler(async ({ data }) => {
@@ -51,7 +59,7 @@ export const createRenderJob = createServerFn({ method: "POST" })
 
     const response = await admin.from("render_jobs").insert(payload).select("*").single();
     if (response.error) {
-      return { job: null, error: response.error.message || "Falha ao criar job de renderização." };
+      return { job: null, error: formatRenderJobsError(response.error) };
     }
 
     return { job: response.data as RenderJobRow };
@@ -67,7 +75,7 @@ export const listRenderJobs = createServerFn({ method: "POST" })
       .limit(data.limit);
 
     if (response.error) {
-      return { jobs: [], error: response.error.message || "Falha ao carregar jobs." };
+      return { jobs: [], error: formatRenderJobsError(response.error) };
     }
 
     return { jobs: response.data as RenderJobRow[] };
