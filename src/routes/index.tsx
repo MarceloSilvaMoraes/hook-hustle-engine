@@ -217,17 +217,28 @@ function Index() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const savedToken = window.localStorage.getItem("hook_hustle_youtube_refresh_token") || "";
-    if (savedToken) {
-      setYoutubeRefreshToken(savedToken);
-      setOauthStatus("Token do YouTube disponível para o worker local.");
-    }
+    const syncYoutubeAuth = () => {
+      const savedToken = window.localStorage.getItem("hook_hustle_youtube_refresh_token") || "";
+      if (savedToken) {
+        setYoutubeRefreshToken(savedToken);
+        setOauthStatus("Autenticação concluída. Token do YouTube disponível para o worker local.");
+      } else {
+        setYoutubeRefreshToken("");
+        setOauthStatus("Aguardando login do Google...");
+      }
+    };
+
+    syncYoutubeAuth();
+    window.addEventListener("storage", syncYoutubeAuth);
 
     void fetchJobs();
     const timer = window.setInterval(() => {
       void fetchJobs();
     }, 20000);
-    return () => window.clearInterval(timer);
+    return () => {
+      window.removeEventListener("storage", syncYoutubeAuth);
+      window.clearInterval(timer);
+    };
   }, []);
 
   useEffect(() => {
@@ -256,6 +267,10 @@ function Index() {
   const canAnalyze = transcript.trim().length >= 50 && !mutation.isPending;
   const canCreateJob = clips.length > 0 && sourceUrl.trim().length > 0 && !renderMutation.isPending;
   const canPublishToYoutube = Boolean(youtubeRefreshToken) && jobs.some((job) => job.status === "done");
+  const youtubeAuthLabel = youtubeRefreshToken ? "Autenticação concluída" : "Aguardando login do Google";
+  const youtubeAuthHint = youtubeRefreshToken
+    ? "Token do YouTube disponível. O worker local pode publicar quando o job terminar."
+    : "Complete a autenticação com o Google para habilitar a publicação.";
 
   const handleConnectYoutube = () => {
     const clientId = getGoogleClientId();
@@ -545,7 +560,8 @@ function Index() {
                   </div>
                   <div className="rounded-2xl border border-border bg-background p-4">
                     <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Status</div>
-                    <div className="mt-2 font-semibold">Aguardando credenciais do YouTube</div>
+                    <div className="mt-2 font-semibold">{youtubeAuthLabel}</div>
+                    <div className="mt-1 text-sm text-muted-foreground">{youtubeAuthHint}</div>
                   </div>
                 </div>
                 {!sourceUrl.trim() && (
@@ -730,8 +746,8 @@ function Index() {
                       </button>
                       <span className="text-[10px] text-muted-foreground">
                         {canPublishToYoutube
-                          ? "Token do YouTube disponível. Ative o worker local com YOUTUBE_AUTO_PUBLISH=true para publicar."
-                          : "Faça login no Google para gerar o token de publicação."}
+                          ? youtubeAuthHint
+                          : youtubeAuthHint}
                       </span>
                     </div>
                     {job.error_message && (
