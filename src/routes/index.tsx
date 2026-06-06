@@ -131,6 +131,7 @@ function Index() {
   const [gsiReady, setGsiReady] = useState(false);
   const [redirectUri, setRedirectUri] = useState("");
   const [oauthStatus, setOauthStatus] = useState("Aguardando login do Google...");
+  const [youtubeRefreshToken, setYoutubeRefreshToken] = useState("");
   const [playing, setPlaying] = useState<{ start: number; end: number; title: string } | null>(null);
 
   const analyze = useServerFn(analyzeTranscript);
@@ -214,6 +215,14 @@ function Index() {
   };
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const savedToken = window.localStorage.getItem("hook_hustle_youtube_refresh_token") || "";
+    if (savedToken) {
+      setYoutubeRefreshToken(savedToken);
+      setOauthStatus("Token do YouTube disponível para o worker local.");
+    }
+
     void fetchJobs();
     const timer = window.setInterval(() => {
       void fetchJobs();
@@ -246,6 +255,7 @@ function Index() {
 
   const canAnalyze = transcript.trim().length >= 50 && !mutation.isPending;
   const canCreateJob = clips.length > 0 && sourceUrl.trim().length > 0 && !renderMutation.isPending;
+  const canPublishToYoutube = Boolean(youtubeRefreshToken) && jobs.some((job) => job.status === "done");
 
   const handleConnectYoutube = () => {
     const clientId = getGoogleClientId();
@@ -713,12 +723,16 @@ function Index() {
                       <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Publicação</div>
                       <button
                         type="button"
-                        disabled={job.status !== "done"}
+                        disabled={!canPublishToYoutube || job.status !== "done"}
                         className="font-display text-xs uppercase tracking-widest bg-primary text-primary-foreground px-4 py-2 rounded-lg transition-all hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed"
                       >
-                        Inserir no YouTube
+                        {canPublishToYoutube ? "Inserir no YouTube" : "Aguardando token do YouTube"}
                       </button>
-                      <span className="text-[10px] text-muted-foreground">Aguardando credenciais do canal.</span>
+                      <span className="text-[10px] text-muted-foreground">
+                        {canPublishToYoutube
+                          ? "Token do YouTube disponível. Ative o worker local com YOUTUBE_AUTO_PUBLISH=true para publicar."
+                          : "Faça login no Google para gerar o token de publicação."}
+                      </span>
                     </div>
                     {job.error_message && (
                       <div>

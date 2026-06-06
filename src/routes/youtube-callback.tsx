@@ -40,8 +40,13 @@ function YoutubeCallback() {
           return;
         }
 
-        setStatus("Autenticação concluída. Copie o refresh token abaixo para o seu .env.");
-        setToken(result.refreshToken || "");
+        const refreshToken = result.refreshToken || "";
+        if (refreshToken) {
+          window.localStorage.setItem("hook_hustle_youtube_refresh_token", refreshToken);
+        }
+
+        setStatus("Autenticação concluída. Copie o refresh token abaixo para o seu .env e ative o worker local.");
+        setToken(refreshToken);
       } catch (err) {
         setStatus(err instanceof Error ? err.message : "Erro inesperado durante a autenticação.");
       }
