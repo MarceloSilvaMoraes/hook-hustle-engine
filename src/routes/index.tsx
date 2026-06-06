@@ -266,7 +266,8 @@ function Index() {
 
   const canAnalyze = transcript.trim().length >= 50 && !mutation.isPending;
   const canCreateJob = clips.length > 0 && sourceUrl.trim().length > 0 && !renderMutation.isPending;
-  const canPublishToYoutube = Boolean(youtubeRefreshToken) && jobs.some((job) => job.status === "done");
+  const canPublishToYoutube =
+    Boolean(youtubeRefreshToken) && jobs.some((job) => job.status === "done" || job.status === "completed");
   const youtubeAuthLabel = youtubeRefreshToken ? "Autenticação concluída" : "Aguardando login do Google";
   const youtubeAuthHint = youtubeRefreshToken
     ? "Token do YouTube disponível. O worker local pode publicar quando o job terminar."
@@ -708,13 +709,13 @@ function Index() {
                     <div className="rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-widest"
                       style={{
                         backgroundColor:
-                          job.status === "done"
+                          job.status === "done" || job.status === "completed"
                             ? "rgba(16, 185, 129, 0.12)"
                             : job.status === "failed"
                             ? "rgba(239, 68, 68, 0.12)"
                             : "rgba(59, 130, 246, 0.12)",
                         color:
-                          job.status === "done"
+                          job.status === "done" || job.status === "completed"
                             ? "#10b981"
                             : job.status === "failed"
                             ? "#ef4444"
@@ -734,7 +735,7 @@ function Index() {
                       <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Publicação</div>
                       <button
                         type="button"
-                        disabled={!canPublishToYoutube || job.status !== "done"}
+                        disabled={!canPublishToYoutube || (job.status !== "done" && job.status !== "completed")}
                         className="font-display text-xs uppercase tracking-widest bg-primary text-primary-foreground px-4 py-2 rounded-lg transition-all hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         {canPublishToYoutube ? "Inserir no YouTube" : "Aguardando token do YouTube"}
