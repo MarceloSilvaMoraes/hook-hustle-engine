@@ -296,8 +296,6 @@ function Index() {
       scope: "openid email profile https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.force-ssl",
       ux_mode: "popup",
       redirect_uri: "postmessage",
-      access_type: "offline",
-      include_granted_scopes: true,
       prompt: "consent select_account",
       callback: async (response) => {
         if (response.error) {

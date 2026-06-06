@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { workerSupabase } from "./worker-supabase.server";
 import type { RenderJobClip, RenderJobRow } from "./render-jobs.types";
 
 const RenderJobClipSchema = z.object({
