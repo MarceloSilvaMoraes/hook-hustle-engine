@@ -564,6 +564,29 @@ function Index() {
                     <div className="mt-1 text-sm text-muted-foreground">{youtubeAuthHint}</div>
                   </div>
                 </div>
+                {youtubeRefreshToken && (
+                  <div className="mt-4 rounded-2xl border border-primary/30 bg-primary/5 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-[10px] uppercase tracking-widest text-primary">YOUTUBE_REFRESH_TOKEN</div>
+                        <div className="mt-1 font-mono text-xs break-all text-muted-foreground">{youtubeRefreshToken}</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(youtubeRefreshToken);
+                          toast.success("Token copiado! Cole no .env do worker.py");
+                        }}
+                        className="shrink-0 rounded-xl border border-primary/40 bg-primary/10 px-3 py-2 text-xs font-semibold uppercase tracking-widest text-primary hover:bg-primary/20"
+                      >
+                        Copiar
+                      </button>
+                    </div>
+                    <p className="mt-2 text-[11px] text-muted-foreground">
+                      Cole no <code className="font-mono">.env</code> do worker.py como <code className="font-mono">YOUTUBE_REFRESH_TOKEN=...</code> e defina <code className="font-mono">YOUTUBE_AUTO_PUBLISH=true</code>.
+                    </p>
+                  </div>
+                )}
                 {!sourceUrl.trim() && (
                   <p className="mt-4 text-sm text-destructive">
                     Para renderizar localmente, o job precisa de um link de vídeo válido.
