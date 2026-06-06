@@ -296,7 +296,9 @@ function Index() {
       scope: "openid email profile https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.force-ssl",
       ux_mode: "popup",
       redirect_uri: "postmessage",
-      prompt: "select_account consent",
+      access_type: "offline",
+      include_granted_scopes: true,
+      prompt: "consent select_account",
       callback: async (response) => {
         if (response.error) {
           toast.error("O login com o Google foi cancelado ou falhou.");
