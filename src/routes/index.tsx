@@ -326,7 +326,19 @@ function Index() {
           return;
         }
 
-        setOauthStatus("Autenticação concluída com sucesso.");
+        const savedToken = window.localStorage.getItem("hook_hustle_youtube_refresh_token") || "";
+        const nextToken = result.refreshToken || savedToken;
+
+        if (nextToken) {
+          window.localStorage.setItem("hook_hustle_youtube_refresh_token", nextToken);
+          setYoutubeRefreshToken(nextToken);
+        }
+
+        setOauthStatus(
+          nextToken
+            ? "Autenticação concluída. O token do YouTube foi salvo e a publicação pode ser habilitada."
+            : "Autenticação concluída, mas o Google não retornou um refresh token. Tente autorizar novamente."
+        );
         toast.success("Login do Google concluído.");
       },
     });
