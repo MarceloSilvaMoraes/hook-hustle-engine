@@ -47,15 +47,24 @@ JOB_TABLE = "render_jobs"
 
 
 def fetch_pending_job() -> dict | None:
+    # First, check for rendering jobs (pending)
     url = f"{SUPABASE_URL}/rest/v1/{JOB_TABLE}?select=*&status=eq.pending&order=created_at.asc&limit=1"
+    response = request("GET", url, headers=HEADERS)
+    response.raise_for_status()
+    data = response.json()
+    if data:
+        return data[0]
+    
+    # Then check for YouTube publish requests (published_requested)
+    url = f"{SUPABASE_URL}/rest/v1/{JOB_TABLE}?select=*&status=eq.published_requested&order=created_at.asc&limit=1"
     response = request("GET", url, headers=HEADERS)
     response.raise_for_status()
     data = response.json()
     return data[0] if data else None
 
 
-def claim_job(job_id: str) -> bool:
-    url = f"{SUPABASE_URL}/rest/v1/{JOB_TABLE}?id=eq.{job_id}&status=eq.pending"
+def claim_job(job_id: str, current_status: str) -> bool:
+    url = f"{SUPABASE_URL}/rest/v1/{JOB_TABLE}?id=eq.{job_id}&status=eq.{current_status}"
     body = {
         "status": "in_progress",
         "worker_id": WORKER_ID,
@@ -188,54 +197,121 @@ def render_clip(source_path: Path, clip: dict, output_dir: Path) -> Path:
     return output_file
 
 
+def process_render_job(job: dict) -> None:
+    """Process a rendering job (status: pending)."""
+    job_id = job["id"]
+    print(f"Processing render job: {job_id}")
+    
+    workspace = OUTPUT_DIR / job_id
+    workspace.mkdir(parents=True, exist_ok=True)
+    video_file = download_video(job["video_url"], workspace)
+
+    rendered_files = []
+    youtube_links = []
+    clip_items = job.get("clip_items") or []
+    for clip in clip_items:
+        rendered = render_clip(video_file, clip, OUTPUT_DIR)
+        rendered_files.append(str(rendered))
+
+        if YOUTUBE_AUTO_PUBLISH:
+            try:
+                youtube_url = upload_clip_to_youtube(rendered, clip)
+                youtube_links.append(youtube_url)
+                print(f"Published to YouTube: {youtube_url}")
+            except Exception as upload_exc:
+                print("YouTube upload failed:", upload_exc)
+
+    output_paths = " | ".join(rendered_files) if rendered_files else str(OUTPUT_DIR)
+    if youtube_links:
+        output_paths = f"{output_paths} | YouTube: {' | '.join(youtube_links)}"
+    update_job(job_id, {
+        "status": "done",
+        "output_path": output_paths,
+        "completed_at": datetime.utcnow().isoformat() + "Z",
+        "error_message": None,
+    })
+    print(f"Render job {job_id} completed. Files: {len(rendered_files)}")
+
+
+def process_publish_job(job: dict) -> None:
+    """Process a publish request job (status: published_requested)."""
+    job_id = job["id"]
+    print(f"Processing publish request: {job_id}")
+    
+    if not YOUTUBE_AUTO_PUBLISH:
+        print("YouTube auto-publish is disabled. Marking job as completed without publishing.")
+        update_job(job_id, {
+            "status": "completed",
+            "completed_at": datetime.utcnow().isoformat() + "Z",
+            "error_message": "YouTube auto-publish is disabled on this worker.",
+        })
+        return
+
+    # Get the output files to publish
+    output_path = job.get("output_path", "")
+    if not output_path:
+        raise RuntimeError("Job has no output path to publish")
+
+    # Extract local file paths (before YouTube links)
+    files_to_publish = []
+    for part in output_path.split(" | "):
+        if not part.strip().startswith("YouTube:") and part.strip():
+            files_to_publish.append(Path(part.strip()))
+
+    youtube_links = []
+    clip_items = job.get("clip_items") or []
+    
+    for i, file_path in enumerate(files_to_publish):
+        if file_path.exists() and i < len(clip_items):
+            try:
+                clip = clip_items[i]
+                youtube_url = upload_clip_to_youtube(file_path, clip)
+                youtube_links.append(youtube_url)
+                print(f"Published to YouTube: {youtube_url}")
+            except Exception as upload_exc:
+                print(f"YouTube upload failed for {file_path}: {upload_exc}")
+                raise
+
+    new_output = output_path
+    if youtube_links:
+        new_output = f"{output_path} | YouTube: {' | '.join(youtube_links)}"
+    
+    update_job(job_id, {
+        "status": "completed",
+        "output_path": new_output,
+        "completed_at": datetime.utcnow().isoformat() + "Z",
+        "error_message": None,
+    })
+    print(f"Publish job {job_id} completed. YouTube links: {len(youtube_links)}")
+
+
 def run_worker() -> None:
     print(f"Local render worker started. Polling every {POLL_SECONDS}s.")
     while True:
         try:
             job = fetch_pending_job()
             if not job:
-                print("Nenhum job pendente. Aguardando...")
+                print("No pending jobs. Waiting...")
                 time.sleep(POLL_SECONDS)
                 continue
 
             job_id = job["id"]
-            print(f"Encontrado job pendente: {job_id}")
-            if not claim_job(job_id):
-                print("Job já foi processado por outro worker. Continuando...")
+            current_status = job["status"]
+            print(f"Found {current_status} job: {job_id}")
+            
+            if not claim_job(job_id, current_status):
+                print("Job already processed by another worker. Continuing...")
                 continue
 
-            workspace = OUTPUT_DIR / job_id
-            workspace.mkdir(parents=True, exist_ok=True)
-            video_file = download_video(job["video_url"], workspace)
-
-            rendered_files = []
-            youtube_links = []
-            clip_items = job.get("clip_items") or []
-            for clip in clip_items:
-                rendered = render_clip(video_file, clip, OUTPUT_DIR)
-                rendered_files.append(str(rendered))
-
-                if YOUTUBE_AUTO_PUBLISH:
-                    try:
-                        youtube_url = upload_clip_to_youtube(rendered, clip)
-                        youtube_links.append(youtube_url)
-                        print(f"Publicado no YouTube: {youtube_url}")
-                    except Exception as upload_exc:
-                        print("Falha ao publicar no YouTube:", upload_exc)
-
-            output_paths = " | ".join(rendered_files) if rendered_files else str(OUTPUT_DIR)
-            if youtube_links:
-                output_paths = f"{output_paths} | YouTube: {' | '.join(youtube_links)}"
-            update_job(job_id, {
-                "status": "done",
-                "output_path": output_paths,
-                "completed_at": datetime.utcnow().isoformat() + "Z",
-                "error_message": None,
-            })
-            print(f"Job {job_id} concluído. Arquivos: {len(rendered_files)}")
+            if current_status == "pending":
+                process_render_job(job)
+            elif current_status == "published_requested":
+                process_publish_job(job)
+            else:
+                print(f"Unknown job status: {current_status}")
 
         except Exception as exc:
-            print("Erro no worker:", exc)
+            print("Worker error:", exc)
             if 'job_id' in locals():
                 try:
                     update_job(job_id, {
@@ -244,7 +320,7 @@ def run_worker() -> None:
                         "completed_at": datetime.utcnow().isoformat() + "Z",
                     })
                 except Exception as inner:
-                    print("Não foi possível marcar job como failed:", inner)
+                    print("Could not mark job as failed:", inner)
             time.sleep(POLL_SECONDS)
 
 
