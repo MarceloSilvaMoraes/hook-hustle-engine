@@ -300,12 +300,13 @@ function Index() {
 
   const canAnalyze = transcript.trim().length >= 50 && !mutation.isPending;
   const canCreateJob = clips.length > 0 && sourceUrl.trim().length > 0 && !renderMutation.isPending;
-  const canPublishToYoutube =
-    Boolean(youtubeRefreshToken) && jobs.some((job) => job.status === "done" || job.status === "completed");
-  const youtubeAuthLabel = youtubeRefreshToken ? "Autenticação concluída" : "Aguardando login do Google";
+  // O worker usa as credenciais do .env local — o botão deve estar sempre habilitado para jobs prontos
+  const canPublishToYoutube = jobs.some((job) => job.status === "done" || job.status === "completed");
+  const youtubeAuthLabel = youtubeRefreshToken ? "Autenticação concluída" : "Worker configurado via .env";
   const youtubeAuthHint = youtubeRefreshToken
     ? "Token do YouTube disponível. O worker local pode publicar quando o job terminar."
-    : "Complete a autenticação com o Google para habilitar a publicação.";
+    : "O worker local usará as credenciais do arquivo .env para publicar no YouTube.";
+
 
   const handleConnectYoutube = () => {
     const clientId = getGoogleClientId();
