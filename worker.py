@@ -7,7 +7,7 @@ import os
 import subprocess
 import sys
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 try:
@@ -46,6 +46,10 @@ HEADERS = {
 JOB_TABLE = "render_jobs"
 
 
+def utc_now_iso() -> str:
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+
+
 def fetch_pending_job() -> dict | None:
     # First, check for rendering jobs (pending)
     url = f"{SUPABASE_URL}/rest/v1/{JOB_TABLE}?select=*&status=eq.pending&order=created_at.asc&limit=1"
@@ -68,7 +72,7 @@ def claim_job(job_id: str, current_status: str) -> bool:
     body = {
         "status": "in_progress",
         "worker_id": WORKER_ID,
-        "locked_at": datetime.utcnow().isoformat() + "Z",
+        "locked_at": utc_now_iso(),
     }
     response = request("PATCH", url, headers=HEADERS, data=json.dumps(body))
     response.raise_for_status()
@@ -79,6 +83,19 @@ def update_job(job_id: str, updates: dict) -> None:
     url = f"{SUPABASE_URL}/rest/v1/{JOB_TABLE}?id=eq.{job_id}"
     response = request("PATCH", url, headers=HEADERS, data=json.dumps(updates))
     response.raise_for_status()
+
+
+def get_missing_youtube_config() -> list[str]:
+    missing: list[str] = []
+    if not YOUTUBE_AUTO_PUBLISH:
+        missing.append("YOUTUBE_AUTO_PUBLISH=true")
+    if not YOUTUBE_CLIENT_ID:
+        missing.append("YOUTUBE_CLIENT_ID")
+    if not YOUTUBE_CLIENT_SECRET:
+        missing.append("YOUTUBE_CLIENT_SECRET")
+    if not YOUTUBE_REFRESH_TOKEN:
+        missing.append("YOUTUBE_REFRESH_TOKEN")
+    return missing
 
 
 def get_youtube_service():
@@ -227,7 +244,7 @@ def process_render_job(job: dict) -> None:
     update_job(job_id, {
         "status": "done",
         "output_path": output_paths,
-        "completed_at": datetime.utcnow().isoformat() + "Z",
+        "completed_at": utc_now_iso(),
         "error_message": None,
     })
     print(f"Render job {job_id} completed. Files: {len(rendered_files)}")
@@ -237,15 +254,13 @@ def process_publish_job(job: dict) -> None:
     """Process a publish request job (status: published_requested)."""
     job_id = job["id"]
     print(f"Processing publish request: {job_id}")
-    
-    if not YOUTUBE_AUTO_PUBLISH:
-        print("YouTube auto-publish is disabled. Marking job as completed without publishing.")
-        update_job(job_id, {
-            "status": "completed",
-            "completed_at": datetime.utcnow().isoformat() + "Z",
-            "error_message": "YouTube auto-publish is disabled on this worker.",
-        })
-        return
+
+    missing_config = get_missing_youtube_config()
+    if missing_config:
+        missing_text = ", ".join(missing_config)
+        raise RuntimeError(
+            f"Publicação no YouTube não configurada neste worker. Ajuste: {missing_text}"
+        )
 
     # Get the output files to publish
     output_path = job.get("output_path", "")
@@ -279,7 +294,7 @@ def process_publish_job(job: dict) -> None:
     update_job(job_id, {
         "status": "completed",
         "output_path": new_output,
-        "completed_at": datetime.utcnow().isoformat() + "Z",
+        "completed_at": utc_now_iso(),
         "error_message": None,
     })
     print(f"Publish job {job_id} completed. YouTube links: {len(youtube_links)}")
@@ -317,7 +332,7 @@ def run_worker() -> None:
                     update_job(job_id, {
                         "status": "failed",
                         "error_message": str(exc),
-                        "completed_at": datetime.utcnow().isoformat() + "Z",
+                        "completed_at": utc_now_iso(),
                     })
                 except Exception as inner:
                     print("Could not mark job as failed:", inner)
