@@ -325,6 +325,8 @@ function Index() {
       ux_mode: "redirect",
       redirect_uri: effectiveRedirectUri,
       prompt: "consent select_account",
+      access_type: "offline",
+      include_granted_scopes: true,
     });
 
     codeClient.requestCode();
