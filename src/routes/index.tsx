@@ -10,6 +10,7 @@ import { ClipCard } from "@/components/ClipCard";
 import { Toaster } from "@/components/ui/sonner";
 import { getGoogleClientId, resolveOAuthRedirectUri } from "@/lib/youtube-auth.functions";
 import { exchangeYoutubeCode } from "@/lib/youtube-auth.server";
+import { publishJobToYoutube } from "@/lib/youtube-publish.functions";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -139,6 +140,7 @@ function Index() {
   const fetchT = useServerFn(fetchTranscript);
   const createJob = useServerFn(createRenderJob);
   const listJobs = useServerFn(listRenderJobs);
+  const publish = useServerFn(publishJobToYoutube);
 
   const fetchMutation = useMutation({
     mutationFn: async () => {
@@ -183,6 +185,21 @@ function Index() {
     onSuccess: (job) => {
       setJobs((prev) => [job, ...prev]);
       toast.success("Job criado e enviado para o worker local.");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const publishMutation = useMutation({
+    mutationFn: async (jobId: string) => {
+      const result = await publish({ data: { jobId } });
+      if (!result.ok) {
+        throw new Error(result.error || "Falha ao publicar no YouTube.");
+      }
+      return result;
+    },
+    onSuccess: () => {
+      toast.success("Solicitação de publicação enviada ao worker local.");
+      void fetchJobs();
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -244,7 +261,7 @@ function Index() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    setRedirectUri(`${window.location.origin}/youtube-callback`);
+    setRedirectUri(resolveOAuthRedirectUri(window.location.origin));
 
     const existing = document.querySelector("script[src='https://accounts.google.com/gsi/client']");
     if (existing) {
@@ -276,6 +293,11 @@ function Index() {
   const handleConnectYoutube = () => {
     const clientId = getGoogleClientId();
     const effectiveRedirectUri = resolveOAuthRedirectUri(typeof window !== "undefined" ? window.location.origin : undefined);
+
+    if (youtubeRefreshToken) {
+      setOauthStatus("Você já está autenticado com o Google. O token salvo será usado pelo worker local.");
+      return;
+    }
 
     if (!clientId) {
       toast.error("Configure VITE_GOOGLE_CLIENT_ID no ambiente para abrir o login do Google.");
@@ -735,10 +757,11 @@ function Index() {
                       <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Publicação</div>
                       <button
                         type="button"
-                        disabled={!canPublishToYoutube || (job.status !== "done" && job.status !== "completed")}
+                        onClick={() => publishMutation.mutate(job.id)}
+                        disabled={!canPublishToYoutube || (job.status !== "done" && job.status !== "completed") || publishMutation.isPending}
                         className="font-display text-xs uppercase tracking-widest bg-primary text-primary-foreground px-4 py-2 rounded-lg transition-all hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed"
                       >
-                        {canPublishToYoutube ? "Inserir no YouTube" : "Aguardando token do YouTube"}
+                        {publishMutation.isPending ? "Enviando..." : canPublishToYoutube ? "Inserir no YouTube" : "Aguardando token do YouTube"}
                       </button>
                       <span className="text-[10px] text-muted-foreground">
                         {canPublishToYoutube

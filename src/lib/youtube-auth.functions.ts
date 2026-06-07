@@ -16,8 +16,25 @@ export function getGoogleClientId() {
   return configured;
 }
 
+function normalizeLocalOrigin(origin?: string) {
+  if (!origin) return undefined;
+
+  try {
+    const url = new URL(origin);
+    if (url.hostname === "localhost" || url.hostname === "[::1]" || url.hostname === "::1") {
+      url.hostname = "127.0.0.1";
+    }
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return origin.replace(/\/$/, "");
+  }
+}
+
 export function resolveOAuthRedirectUri(origin?: string) {
-  if (origin) return `${origin.replace(/\/$/, "")}/youtube-callback`;
+  const normalizedOrigin = normalizeLocalOrigin(origin);
+  if (normalizedOrigin) {
+    return `${normalizedOrigin.replace(/\/$/, "")}/youtube-callback`;
+  }
 
   if (process.env.VITE_GOOGLE_REDIRECT_URI) {
     return process.env.VITE_GOOGLE_REDIRECT_URI;
