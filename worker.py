@@ -157,8 +157,8 @@ def parse_timestamp(ts: str) -> str:
     if len(parts) == 3:
         return f"{parts[0]:02d}:{parts[1]:02d}:{parts[2]:02d}"
     if len(parts) == 2:
-        return f"{parts[0]:02d}:{parts[1]:02d}:00"
-    return f"00:{parts[0]:02d}:00"
+        return f"00:{parts[0]:02d}:{parts[1]:02d}"
+    return f"00:00:{parts[0]:02d}" if parts else "00:00:00"
 
 
 def run_command(command: list[str]) -> None:
