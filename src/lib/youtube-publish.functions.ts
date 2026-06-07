@@ -15,7 +15,7 @@ export const publishJobToYoutube = createServerFn({ method: "POST" })
 
     try {
       // Fetch the current job
-      const { data: jobData, error: fetchError } = await supabaseAdmin
+      const { data: jobData, error: fetchError } = await admin
         .from("render_jobs")
         .select("*")
         .eq("id", jobId)
@@ -41,7 +41,7 @@ export const publishJobToYoutube = createServerFn({ method: "POST" })
       if (!outputPath.includes("youtube.com")) {
         // If no YouTube link yet, just mark as "published_requested"
         // The worker will handle actual publishing if configured
-        const { error: updateError } = await supabaseAdmin
+        const { error: updateError } = await admin
           .from("render_jobs")
           .update({
             status: "published_requested",
@@ -66,7 +66,7 @@ export const publishJobToYoutube = createServerFn({ method: "POST" })
       return {
         ok: true as const,
         message: "Job já foi publicado no YouTube.",
-        youtubeLinks: outputPath.split(" | ").filter((link) => link.includes("youtube.com")),
+        youtubeLinks: outputPath.split(" | ").filter((link: string) => link.includes("youtube.com")),
       };
     } catch (err) {
       return {
