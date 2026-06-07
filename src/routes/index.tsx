@@ -109,10 +109,13 @@ declare global {
           initCodeClient: (config: {
             client_id: string;
             scope: string;
-            ux_mode: "popup";
+            ux_mode: "popup" | "redirect";
             redirect_uri: string;
             prompt?: string;
-            callback: (response: { code?: string; error?: string }) => void;
+            access_type?: "online" | "offline";
+            include_granted_scopes?: boolean;
+            select_account?: boolean;
+            callback?: (response: { code?: string; error?: string }) => void;
           }) => { requestCode: () => void };
         };
       };
@@ -322,6 +325,8 @@ function Index() {
       ux_mode: "redirect",
       redirect_uri: effectiveRedirectUri,
       prompt: "consent select_account",
+      access_type: "offline",
+      include_granted_scopes: true,
     });
 
     codeClient.requestCode();
