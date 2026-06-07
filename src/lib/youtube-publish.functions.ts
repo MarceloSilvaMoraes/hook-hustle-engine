@@ -28,6 +28,13 @@ export const publishJobToYoutube = createServerFn({ method: "POST" })
         };
       }
 
+      if (jobData.status === "published_requested") {
+        return {
+          ok: true as const,
+          message: "A publicação já foi solicitada e está aguardando o worker local.",
+        };
+      }
+
       // Check if job is completed
       if (jobData.status !== "done" && jobData.status !== "completed") {
         return {
@@ -46,6 +53,7 @@ export const publishJobToYoutube = createServerFn({ method: "POST" })
           .update({
             status: "published_requested",
             updated_at: new Date().toISOString(),
+            error_message: null,
           })
           .eq("id", jobId);
 
