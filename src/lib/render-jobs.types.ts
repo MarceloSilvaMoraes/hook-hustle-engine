@@ -1,4 +1,4 @@
-export type RenderJobStatus = "pending" | "in_progress" | "done" | "completed" | "failed";
+export type RenderJobStatus = "pending" | "in_progress" | "published_requested" | "done" | "completed" | "failed";
 
 export interface RenderJobClip {
   title: string;
