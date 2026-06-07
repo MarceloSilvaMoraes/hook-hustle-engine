@@ -95,3 +95,50 @@ export const clearOldRenderJobs = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+export const retryRenderJob = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) => z.object({ jobId: z.string().min(1) }).parse(data))
+  .handler(async ({ data }) => {
+    const { jobId } = data;
+    try {
+      const { data: jobData, error: fetchError } = await admin
+        .from("render_jobs")
+        .select("*")
+        .eq("id", jobId)
+        .single();
+
+      if (fetchError || !jobData) {
+        return { ok: false as const, error: "Job não encontrado." };
+      }
+
+      // If output_path exists and looks like local files (doesn't contain youtube.com but has path),
+      // we can retry publishing. Otherwise, retry rendering.
+      const hasOutputFiles = jobData.output_path && 
+                             !jobData.output_path.includes("youtube.com") && 
+                             jobData.output_path.trim().length > 0;
+      
+      const newStatus = hasOutputFiles ? "published_requested" : "pending";
+
+      const { error: updateError } = await admin
+        .from("render_jobs")
+        .update({
+          status: newStatus,
+          updated_at: new Date().toISOString(),
+          error_message: null,
+        })
+        .eq("id", jobId);
+
+      if (updateError) {
+        return { ok: false as const, error: "Falha ao reiniciar o job." };
+      }
+
+      return { 
+        ok: true as const, 
+        message: newStatus === "published_requested" 
+          ? "Solicitação de publicação reenviada." 
+          : "Job de renderização reiniciado na fila." 
+      };
+    } catch (err) {
+      return { ok: false as const, error: err instanceof Error ? err.message : "Erro ao reiniciar o job." };
+    }
+  });
+

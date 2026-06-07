@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { analyzeTranscript, type ViralClip } from "@/lib/clips.functions";
 import { fetchTranscript } from "@/lib/transcript.functions";
-import { createRenderJob, listRenderJobs, clearOldRenderJobs, type RenderJob } from "@/lib/render-jobs.functions";
+import { createRenderJob, listRenderJobs, clearOldRenderJobs, retryRenderJob, type RenderJob } from "@/lib/render-jobs.functions";
 import { ClipCard } from "@/components/ClipCard";
 import { Toaster } from "@/components/ui/sonner";
 import { getGoogleClientId, resolveOAuthRedirectUri } from "@/lib/youtube-auth.functions";
@@ -221,6 +221,22 @@ function Index() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const retryJob = useServerFn(retryRenderJob);
+  const retryMutation = useMutation({
+    mutationFn: async (jobId: string) => {
+      const result = await retryJob({ data: { jobId } });
+      if (!result.ok) {
+        throw new Error(result.error || "Falha ao reiniciar o job.");
+      }
+      return result;
+    },
+    onSuccess: (result) => {
+      toast.success(result.message);
+      void fetchJobs();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const mutation = useMutation({
     mutationFn: async () => {
       const result = await analyze({
@@ -367,7 +383,7 @@ function Index() {
     }
   };
 
-  const isJobReadyToPublish = (status: RenderJob["status"]) => status === "done" || status === "completed" || status === "failed";
+  const isJobReadyToPublish = (status: RenderJob["status"]) => status === "done" || status === "completed";
   const isJobSuccess = (status: RenderJob["status"]) => status === "done" || status === "completed";
   const isJobPublishing = (status: RenderJob["status"]) => status === "published_requested";
 
@@ -908,6 +924,16 @@ function Index() {
                         className="font-mono text-[9px] uppercase tracking-widest bg-primary hover:bg-primary/90 text-primary-foreground px-3 py-1.5 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                       >
                         {publishMutation.isPending ? "Subindo..." : "Subir YouTube"}
+                      </button>
+                    )}
+                    {job.status === "failed" && (
+                      <button
+                        type="button"
+                        onClick={() => retryMutation.mutate(job.id)}
+                        disabled={retryMutation.isPending}
+                        className="font-mono text-[9px] uppercase tracking-widest bg-destructive hover:bg-destructive/90 text-destructive-foreground px-3 py-1.5 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                      >
+                        {retryMutation.isPending ? "Reiniciando..." : "Tentar Novamente"}
                       </button>
                     )}
                   </div>
