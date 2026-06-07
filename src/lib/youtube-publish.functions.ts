@@ -36,7 +36,7 @@ export const publishJobToYoutube = createServerFn({ method: "POST" })
       }
 
       // Check if job is completed
-      if (jobData.status !== "done" && jobData.status !== "completed") {
+      if (jobData.status !== "done" && jobData.status !== "completed" && jobData.status !== "failed") {
         return {
           ok: false as const,
           error: `Job ainda não foi concluído. Status atual: ${jobData.status}`,

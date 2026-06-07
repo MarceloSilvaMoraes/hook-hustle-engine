@@ -367,7 +367,7 @@ function Index() {
     }
   };
 
-  const isJobReadyToPublish = (status: RenderJob["status"]) => status === "done" || status === "completed";
+  const isJobReadyToPublish = (status: RenderJob["status"]) => status === "done" || status === "completed" || status === "failed";
   const isJobSuccess = (status: RenderJob["status"]) => status === "done" || status === "completed";
   const isJobPublishing = (status: RenderJob["status"]) => status === "published_requested";
 
