@@ -332,6 +332,31 @@ function Index() {
     codeClient.requestCode();
   };
 
+  const getJobStatusLabel = (status: RenderJob["status"]) => {
+    switch (status) {
+      case "pending":
+        return "na fila";
+      case "in_progress":
+        return "processando";
+      case "published_requested":
+        return "aguardando publicação";
+      case "done":
+        return "renderizado";
+      case "completed":
+        return "publicado";
+      case "failed":
+        return "falhou";
+      default:
+        return status.replace("_", " ");
+    }
+  };
+
+  const isJobReadyToPublish = (status: RenderJob["status"]) => status === "done" || status === "completed";
+
+  const isJobSuccess = (status: RenderJob["status"]) => status === "done" || status === "completed";
+
+  const isJobPublishing = (status: RenderJob["status"]) => status === "published_requested";
+
   return (
     <div className="min-h-screen bg-background text-foreground font-body selection:bg-primary selection:text-white">
       <Toaster theme="dark" />
@@ -537,7 +562,7 @@ function Index() {
                     <p className="text-xs uppercase tracking-widest text-muted-foreground">Local render worker</p>
                     <h3 className="font-display text-2xl mt-2">Crie o job e deixe o worker rodar</h3>
                     <p className="mt-2 text-sm text-muted-foreground max-w-2xl">
-                      A publicação automática no YouTube será habilitada quando as credenciais do canal estiverem prontas.
+                      O worker local corta o vídeo e publica no YouTube. Se faltar alguma credencial, o erro aparece abaixo no job.
                     </p>
                   </div>
                   <div className="space-y-2 text-right">
@@ -736,20 +761,24 @@ function Index() {
                     <div className="rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-widest"
                       style={{
                         backgroundColor:
-                          job.status === "done" || job.status === "completed"
+                          isJobSuccess(job.status)
                             ? "rgba(16, 185, 129, 0.12)"
+                            : isJobPublishing(job.status)
+                            ? "rgba(245, 158, 11, 0.14)"
                             : job.status === "failed"
                             ? "rgba(239, 68, 68, 0.12)"
                             : "rgba(59, 130, 246, 0.12)",
                         color:
-                          job.status === "done" || job.status === "completed"
+                          isJobSuccess(job.status)
                             ? "#10b981"
+                            : isJobPublishing(job.status)
+                            ? "#f59e0b"
                             : job.status === "failed"
                             ? "#ef4444"
                             : "#3b82f6",
                       }}
                     >
-                      {job.status.replace("_", " ")}
+                      {getJobStatusLabel(job.status)}
                     </div>
                   </div>
 
@@ -763,10 +792,16 @@ function Index() {
                       <button
                         type="button"
                         onClick={() => publishMutation.mutate(job.id)}
-                        disabled={!canPublishToYoutube || (job.status !== "done" && job.status !== "completed") || publishMutation.isPending}
+                        disabled={!canPublishToYoutube || !isJobReadyToPublish(job.status) || publishMutation.isPending}
                         className="font-display text-xs uppercase tracking-widest bg-primary text-primary-foreground px-4 py-2 rounded-lg transition-all hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed"
                       >
-                        {publishMutation.isPending ? "Enviando..." : canPublishToYoutube ? "Inserir no YouTube" : "Aguardando token do YouTube"}
+                        {publishMutation.isPending
+                          ? "Enviando..."
+                          : isJobPublishing(job.status)
+                          ? "Aguardando worker"
+                          : canPublishToYoutube
+                          ? "Inserir no YouTube"
+                          : "Aguardando token do YouTube"}
                       </button>
                       <span className="text-[10px] text-muted-foreground">
                         {canPublishToYoutube
