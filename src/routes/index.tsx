@@ -347,7 +347,7 @@ function Index() {
       case "failed":
         return "falhou";
       default:
-        return status.replace("_", " ");
+        return String(status);
     }
   };
 
