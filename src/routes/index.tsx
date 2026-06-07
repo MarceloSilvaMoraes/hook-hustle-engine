@@ -280,16 +280,26 @@ function Index() {
 
     syncYoutubeAuth();
     window.addEventListener("storage", syncYoutubeAuth);
-
-    void fetchJobs();
-    const timer = window.setInterval(() => {
-      void fetchJobs();
-    }, 20000);
     return () => {
       window.removeEventListener("storage", syncYoutubeAuth);
-      window.clearInterval(timer);
     };
   }, []);
+
+  const hasActiveJob = jobs.some((j) => ["pending", "in_progress", "published_requested"].includes(j.status));
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    void fetchJobs();
+    const interval = hasActiveJob ? 2500 : 20000;
+    const timer = window.setInterval(() => {
+      void fetchJobs();
+    }, interval);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [hasActiveJob]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -842,21 +852,39 @@ function Index() {
                   </div>
                 </div>
                 <div className="mt-6">
-                  <div className="flex justify-between items-center text-xs font-mono mb-2">
-                    <span className="text-muted-foreground">Progresso do Processamento</span>
-                    <span className="text-primary animate-pulse">
-                      {processingJob.status === "in_progress" ? "Baixando, Cortando & Renderizando..." : "Aguardando na fila do worker..."}
-                    </span>
-                  </div>
-                  <div className="h-2 w-full bg-surface border border-border rounded-full overflow-hidden">
-                    <div className="h-full bg-primary rounded-full animate-pulse w-full" />
-                  </div>
+                  {(() => {
+                    const progressMsg = processingJob.output_path?.includes("Progress:")
+                      ? processingJob.output_path.split(" | ").find(p => p.includes("Progress:"))?.replace("Progress:", "").trim()
+                      : null;
+                    const statusMsg = progressMsg ?? (
+                      processingJob.status === "in_progress"
+                        ? "Baixando, Cortando & Renderizando..."
+                        : processingJob.status === "published_requested"
+                        ? "Aguardando worker para enviar ao YouTube..."
+                        : "Aguardando na fila do worker..."
+                    );
+                    const isYoutubeUpload = progressMsg?.includes("YouTube") || processingJob.status === "published_requested";
+                    return (
+                      <>
+                        <div className="flex justify-between items-center text-xs font-mono mb-2">
+                          <span className="text-muted-foreground">Progresso do Processamento</span>
+                          <span className={`animate-pulse font-medium ${isYoutubeUpload ? "text-red-400" : "text-primary"}`}>
+                            {isYoutubeUpload ? "⬆ " : "⚙ "}{statusMsg}
+                          </span>
+                        </div>
+                        <div className="h-2 w-full bg-surface border border-border rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full animate-pulse w-full ${isYoutubeUpload ? "bg-red-500" : "bg-primary"}`} />
+                        </div>
+                        {progressMsg && (
+                          <div className="mt-3 rounded-xl border border-primary/20 bg-primary/5 px-4 py-2.5 text-xs font-mono text-primary flex items-center gap-2">
+                            <span className="animate-spin text-base">⟳</span>
+                            <span>{progressMsg}</span>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
-                {processingJob.output_path && (
-                  <p className="mt-4 text-xs font-mono text-muted-foreground truncate">
-                    Caminho de saída: {processingJob.output_path}
-                  </p>
-                )}
               </div>
             )}
 

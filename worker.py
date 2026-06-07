@@ -221,17 +221,27 @@ def process_render_job(job: dict) -> None:
     
     workspace = OUTPUT_DIR / job_id
     workspace.mkdir(parents=True, exist_ok=True)
+    
+    update_job(job_id, {"output_path": "Progress: Baixando vídeo original do YouTube..."})
     video_file = download_video(job["video_url"], workspace)
 
     rendered_files = []
     youtube_links = []
     clip_items = job.get("clip_items") or []
-    for clip in clip_items:
+    for i, clip in enumerate(clip_items):
+        progress_text = f"Progress: Renderizando clipe {i+1} de {len(clip_items)}..."
+        print(progress_text)
+        update_job(job_id, {"output_path": progress_text})
+        
         rendered = render_clip(video_file, clip, OUTPUT_DIR)
         rendered_files.append(str(rendered))
 
         if YOUTUBE_AUTO_PUBLISH:
             try:
+                upload_progress = f"Progress: Enviando clipe {i+1} de {len(clip_items)} para o YouTube..."
+                print(upload_progress)
+                update_job(job_id, {"output_path": upload_progress})
+                
                 youtube_url = upload_clip_to_youtube(rendered, clip)
                 youtube_links.append(youtube_url)
                 print(f"Published to YouTube: {youtube_url}")
@@ -267,18 +277,26 @@ def process_publish_job(job: dict) -> None:
     if not output_path:
         raise RuntimeError("Job has no output path to publish")
 
-    # Extract local file paths (before YouTube links)
+    # Extract local file paths (before YouTube links or progress markers)
     files_to_publish = []
     for part in output_path.split(" | "):
-        if not part.strip().startswith("YouTube:") and part.strip():
-            files_to_publish.append(Path(part.strip()))
+        part_str = part.strip()
+        if not part_str.startswith("YouTube:") and not part_str.startswith("Progress:") and part_str:
+            files_to_publish.append(Path(part_str))
 
     youtube_links = []
     clip_items = job.get("clip_items") or []
     
+    # Store the original local file paths string to append progress message to
+    original_paths = " | ".join(str(f) for f in files_to_publish)
+
     for i, file_path in enumerate(files_to_publish):
         if file_path.exists() and i < len(clip_items):
             try:
+                upload_progress = f"Progress: Enviando clipe {i+1} de {len(files_to_publish)} para o YouTube..."
+                print(upload_progress)
+                update_job(job_id, {"output_path": f"{original_paths} | {upload_progress}"})
+                
                 clip = clip_items[i]
                 youtube_url = upload_clip_to_youtube(file_path, clip)
                 youtube_links.append(youtube_url)
@@ -287,9 +305,9 @@ def process_publish_job(job: dict) -> None:
                 print(f"YouTube upload failed for {file_path}: {upload_exc}")
                 raise
 
-    new_output = output_path
+    new_output = original_paths
     if youtube_links:
-        new_output = f"{output_path} | YouTube: {' | '.join(youtube_links)}"
+        new_output = f"{original_paths} | YouTube: {' | '.join(youtube_links)}"
     
     update_job(job_id, {
         "status": "completed",
