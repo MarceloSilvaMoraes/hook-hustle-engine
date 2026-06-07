@@ -80,3 +80,18 @@ export const listRenderJobs = createServerFn({ method: "POST" })
 
     return { jobs: response.data as RenderJobRow[] };
   });
+
+export const clearOldRenderJobs = createServerFn({ method: "POST" })
+  .handler(async () => {
+    const response = await admin
+      .from("render_jobs")
+      .delete()
+      .in("status", ["done", "completed", "failed"]);
+
+    if (response.error) {
+      return { ok: false, error: formatRenderJobsError(response.error) };
+    }
+
+    return { ok: true };
+  });
+

@@ -97,6 +97,8 @@ export const analyzeTranscript = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<ClipAnalysisResult> => {
     const lovableKey = (process.env.LOVABLE_API_KEY || process.env.VITE_LOVABLE_API_KEY || "").trim();
     const openAiKey = (process.env.OPENAI_API_KEY || process.env.VITE_OPENAI_API_KEY || "").trim();
+    const ollamaUrl = (process.env.OLLAMA_BASE_URL || process.env.VITE_OLLAMA_BASE_URL || "http://localhost:11434").trim();
+    const ollamaModel = (process.env.OLLAMA_MODEL || process.env.VITE_OLLAMA_MODEL || "mistral").trim();
 
     const aiConfig = lovableKey && !lovableKey.includes("COLOQUE_SUA_CHAVE_AQUI") && !lovableKey.includes("SEU_TOKEN_AQUI")
       ? {
@@ -112,12 +114,16 @@ export const analyzeTranscript = createServerFn({ method: "POST" })
             endpoint: "https://api.openai.com/v1/chat/completions",
             model: "gpt-4o-mini",
           }
-        : null;
+        : {
+            provider: "ollama" as const,
+            endpoint: `${ollamaUrl}/api/chat`,
+            model: ollamaModel,
+          };
 
     if (!aiConfig) {
       return {
         clips: [],
-        error: "Nenhuma chave de IA válida está configurada. Defina LOVABLE_API_KEY ou OPENAI_API_KEY no arquivo .env antes de analisar o conteúdo.",
+        error: "Nenhuma chave de IA válida está configurada. Defina LOVABLE_API_KEY, OPENAI_API_KEY ou configure Ollama no arquivo .env antes de analisar o conteúdo.",
       };
     }
 
@@ -131,6 +137,48 @@ ${data.transcript}
 Extraia os 5 melhores clipes virais (30-60s) com timestamps, score, justificativa e direção visual.`;
 
     try {
+      if (aiConfig.provider === "ollama") {
+        // Ollama doesn't support tool_choice, so we'll use a simpler prompt
+        const response = await fetch(aiConfig.endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: aiConfig.model,
+            messages: [
+              { role: "system", content: SYSTEM_PROMPT },
+              { 
+                role: "user", 
+                content: `${userPrompt}\n\nResponda em JSON com esta estrutura exatamente:\n${JSON.stringify({ clips: [] })}`
+              },
+            ],
+            stream: false,
+          }),
+        });
+
+        if (!response.ok) {
+          const text = await response.text();
+          console.error("Ollama error:", response.status, text);
+          return { 
+            clips: [], 
+            error: `Erro ao conectar com Ollama (${response.status}). Certifique-se que Ollama está rodando em ${aiConfig.endpoint}` 
+          };
+        }
+
+        const json = await response.json();
+        const content = json.message?.content || "";
+        
+        // Try to extract JSON from response
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) {
+          return { clips: [], error: "Ollama retornou resposta inválida. Tente novamente." };
+        }
+
+        const parsed = JSON.parse(jsonMatch[0]) as { clips: ViralClip[] };
+        const sorted = [...parsed.clips].sort((a, b) => b.score - a.score);
+        return { clips: sorted };
+      }
+
+      // OpenAI or Lovable (with tool_choice)
       const response = await fetch(aiConfig.endpoint, {
         method: "POST",
         headers: {

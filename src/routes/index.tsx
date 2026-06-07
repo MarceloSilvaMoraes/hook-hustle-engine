@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { analyzeTranscript, type ViralClip } from "@/lib/clips.functions";
 import { fetchTranscript } from "@/lib/transcript.functions";
-import { createRenderJob, listRenderJobs, type RenderJob } from "@/lib/render-jobs.functions";
+import { createRenderJob, listRenderJobs, clearOldRenderJobs, type RenderJob } from "@/lib/render-jobs.functions";
 import { ClipCard } from "@/components/ClipCard";
 import { Toaster } from "@/components/ui/sonner";
 import { getGoogleClientId, resolveOAuthRedirectUri } from "@/lib/youtube-auth.functions";
@@ -144,6 +144,20 @@ function Index() {
   const createJob = useServerFn(createRenderJob);
   const listJobs = useServerFn(listRenderJobs);
   const publish = useServerFn(publishJobToYoutube);
+  const clearJobs = useServerFn(clearOldRenderJobs);
+
+  const clearOldJobsMutation = useMutation({
+    mutationFn: async () => {
+      const result = await clearJobs();
+      if (result.error) throw new Error(result.error);
+      return result;
+    },
+    onSuccess: () => {
+      toast.success("Histórico de jobs limpo.");
+      void fetchJobs();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
 
   const fetchMutation = useMutation({
     mutationFn: async () => {
@@ -332,6 +346,7 @@ function Index() {
     codeClient.requestCode();
   };
 
+
   const getJobStatusLabel = (status: RenderJob["status"]) => {
     switch (status) {
       case "pending":
@@ -352,10 +367,20 @@ function Index() {
   };
 
   const isJobReadyToPublish = (status: RenderJob["status"]) => status === "done" || status === "completed";
-
   const isJobSuccess = (status: RenderJob["status"]) => status === "done" || status === "completed";
-
   const isJobPublishing = (status: RenderJob["status"]) => status === "published_requested";
+
+  const activeJob = jobs.find((j) => j.status === "in_progress");
+  const hasPending = jobs.some((j) => j.status === "pending" || j.status === "published_requested");
+  const workerStatus = activeJob
+    ? { label: "Worker Processando... ⚡", color: "text-amber-400 bg-amber-500/10 border-amber-500/20", dotBg: "bg-amber-400", glow: "animate-ping bg-amber-300" }
+    : hasPending
+    ? { label: "Aguardando Fila ⏳", color: "text-blue-400 bg-blue-500/10 border-blue-500/20", dotBg: "bg-blue-400", glow: "animate-pulse bg-blue-300" }
+    : { label: "Worker Ativo & Pronto 🟢", color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20", dotBg: "bg-emerald-400", glow: "bg-emerald-300" };
+
+  const processingJob = activeJob || jobs.find((j) => j.status === "pending" || j.status === "published_requested");
+  const historyJobs = jobs.filter((j) => !["in_progress", "pending", "published_requested"].includes(j.status));
+
 
   return (
     <div className="min-h-screen bg-background text-foreground font-body selection:bg-primary selection:text-white">
@@ -734,31 +759,109 @@ function Index() {
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
                 <p className="text-xs uppercase tracking-widest text-muted-foreground">Fila de renderização</p>
-                <h2 className="font-display text-3xl mt-2">Jobs locais</h2>
+                <div className="flex items-center gap-3 mt-2 flex-wrap">
+                  <h2 className="font-display text-3xl">Jobs locais</h2>
+                  <div className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[10px] font-mono font-medium ${workerStatus.color}`}>
+                    <span className="relative flex h-1.5 w-1.5">
+                      <span className={`${workerStatus.glow} absolute inline-flex h-full w-full rounded-full opacity-75`}></span>
+                      <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${workerStatus.dotBg}`}></span>
+                    </span>
+                    {workerStatus.label}
+                  </div>
+                </div>
                 <p className="mt-2 text-sm text-muted-foreground max-w-2xl">
                   O status é atualizado pelo worker local. Atualize a lista sempre que quiser ver o progresso.
                 </p>
               </div>
-              <button
-                onClick={() => fetchJobs()}
-                className="font-mono text-[10px] uppercase tracking-widest border border-primary/40 text-primary px-4 py-2 rounded-lg hover:bg-primary/10 transition-colors"
-              >
-                Atualizar status
-              </button>
+              <div className="flex gap-2 flex-wrap items-center">
+                <button
+                  onClick={() => clearOldJobsMutation.mutate()}
+                  disabled={clearOldJobsMutation.isPending || !jobs.some(j => ["done", "completed", "failed"].includes(j.status))}
+                  className="font-mono text-[10px] uppercase tracking-widest border border-destructive/40 text-destructive hover:bg-destructive/10 px-4 py-2 rounded-lg transition-colors disabled:opacity-40 cursor-pointer"
+                >
+                  {clearOldJobsMutation.isPending ? "Limpando..." : "Limpar Histórico"}
+                </button>
+                <button
+                  onClick={() => fetchJobs()}
+                  className="font-mono text-[10px] uppercase tracking-widest border border-primary/40 text-primary px-4 py-2 rounded-lg hover:bg-primary/10 transition-colors cursor-pointer"
+                >
+                  Atualizar status
+                </button>
+              </div>
             </div>
 
-            <div className="mt-6 grid gap-4">
-              {jobs.map((job) => (
-                <div key={job.id} className="rounded-3xl border border-border bg-background p-5">
-                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                    <div className="min-w-0">
-                      <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                        Job {job.id.slice(0, 8)} · {new Date(job.created_at).toLocaleString("pt-BR")}
-                      </div>
-                      <div className="mt-2 font-semibold text-lg truncate">{job.video_title || job.video_url}</div>
-                      <div className="mt-1 text-sm text-muted-foreground">{job.platform} · {job.render_format}</div>
+            {/* Active Job Card */}
+            {processingJob && (
+              <div className="mt-6 rounded-3xl border border-primary/30 bg-primary/5 p-6 shadow-[0_8px_32px_0_rgba(120,119,198,0.08)] backdrop-blur-sm relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-3 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-primary bg-primary/10 rounded-bl-2xl">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+                  </span>
+                  Processando
+                </div>
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <span className="text-[10px] font-mono uppercase tracking-widest text-primary">Job Ativo</span>
+                    <h3 className="font-display text-2xl mt-1 text-foreground truncate max-w-xl">
+                      {processingJob.video_title || processingJob.video_url}
+                    </h3>
+                    <p className="mt-1 text-xs text-muted-foreground font-mono">
+                      ID: {processingJob.id} · {processingJob.platform} · {processingJob.render_format}
+                    </p>
+                  </div>
+                  <div className="text-left md:text-right">
+                    <span className="inline-flex rounded-full bg-primary/10 px-3.5 py-1 text-xs font-semibold uppercase tracking-wider text-primary border border-primary/20">
+                      {processingJob.status.replace("_", " ")}
+                    </span>
+                  </div>
+                </div>
+                <div className="mt-6">
+                  <div className="flex justify-between items-center text-xs font-mono mb-2">
+                    <span className="text-muted-foreground">Progresso do Processamento</span>
+                    <span className="text-primary animate-pulse">
+                      {processingJob.status === "in_progress" ? "Baixando, Cortando & Renderizando..." : "Aguardando na fila do worker..."}
+                    </span>
+                  </div>
+                  <div className="h-2 w-full bg-surface border border-border rounded-full overflow-hidden">
+                    <div className="h-full bg-primary rounded-full animate-pulse w-full" />
+                  </div>
+                </div>
+                {processingJob.output_path && (
+                  <p className="mt-4 text-xs font-mono text-muted-foreground truncate">
+                    Caminho de saída: {processingJob.output_path}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Compact History List */}
+            <div className="mt-6 flex flex-col gap-3">
+              <h3 className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-1">Histórico de Jobs</h3>
+              {historyJobs.map((job) => (
+                <div key={job.id} className="p-4 rounded-2xl border border-border/60 bg-background/50 hover:bg-background/80 hover:border-border transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 text-sm">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
+                        Job {job.id.slice(0, 8)}
+                      </span>
+                      <span className="text-[9px] text-muted-foreground font-mono">
+                        {new Date(job.created_at).toLocaleString("pt-BR")}
+                      </span>
                     </div>
-                    <div className="rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-widest"
+                    <div className="mt-1 font-semibold text-foreground truncate">{job.video_title || job.video_url}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5 font-mono">
+                      {job.platform} · {job.render_format} · Out: <span className="text-foreground/80 break-all">{job.output_path || "N/A"}</span>
+                    </div>
+                    {job.error_message && (
+                      <div className="mt-1.5 text-xs text-destructive/90 font-mono bg-destructive/5 border border-destructive/10 rounded px-2 py-1 flex items-start gap-1">
+                        <span className="font-bold shrink-0">Erro:</span>
+                        <span className="break-all">{job.error_message}</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className="rounded-full px-2.5 py-0.5 text-[10px] font-mono uppercase tracking-wider border"
                       style={{
                         backgroundColor:
                           isJobSuccess(job.status)
@@ -768,6 +871,14 @@ function Index() {
                             : job.status === "failed"
                             ? "rgba(239, 68, 68, 0.12)"
                             : "rgba(59, 130, 246, 0.12)",
+                        borderColor:
+                          isJobSuccess(job.status)
+                            ? "rgba(16, 185, 129, 0.25)"
+                            : isJobPublishing(job.status)
+                            ? "rgba(245, 158, 11, 0.3)"
+                            : job.status === "failed"
+                            ? "rgba(239, 68, 68, 0.25)"
+                            : "rgba(59, 130, 246, 0.25)",
                         color:
                           isJobSuccess(job.status)
                             ? "#10b981"
@@ -779,45 +890,25 @@ function Index() {
                       }}
                     >
                       {getJobStatusLabel(job.status)}
-                    </div>
-                  </div>
-
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                    <div>
-                      <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Saída</div>
-                      <div className="mt-1 text-sm text-foreground break-words">{job.output_path || "Aguardando worker"}</div>
-                    </div>
-                    <div className="flex flex-col gap-2 sm:items-end">
-                      <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Publicação</div>
+                    </span>
+                    {isJobReadyToPublish(job.status) && (
                       <button
                         type="button"
                         onClick={() => publishMutation.mutate(job.id)}
-                        disabled={!canPublishToYoutube || !isJobReadyToPublish(job.status) || publishMutation.isPending}
-                        className="font-display text-xs uppercase tracking-widest bg-primary text-primary-foreground px-4 py-2 rounded-lg transition-all hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed"
+                        disabled={!canPublishToYoutube || publishMutation.isPending}
+                        className="font-mono text-[9px] uppercase tracking-widest bg-primary hover:bg-primary/90 text-primary-foreground px-3 py-1.5 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                       >
-                        {publishMutation.isPending
-                          ? "Enviando..."
-                          : isJobPublishing(job.status)
-                          ? "Aguardando worker"
-                          : canPublishToYoutube
-                          ? "Inserir no YouTube"
-                          : "Aguardando token do YouTube"}
+                        {publishMutation.isPending ? "Subindo..." : "Subir YouTube"}
                       </button>
-                      <span className="text-[10px] text-muted-foreground">
-                        {canPublishToYoutube
-                          ? youtubeAuthHint
-                          : youtubeAuthHint}
-                      </span>
-                    </div>
-                    {job.error_message && (
-                      <div>
-                        <div className="text-[10px] uppercase tracking-widest text-destructive">Erro</div>
-                        <div className="mt-1 text-sm text-destructive">{job.error_message}</div>
-                      </div>
                     )}
                   </div>
                 </div>
               ))}
+              {historyJobs.length === 0 && (
+                <div className="text-center py-6 text-xs text-muted-foreground font-mono uppercase tracking-widest border border-dashed border-border rounded-2xl">
+                  Nenhum job finalizado no histórico
+                </div>
+              )}
             </div>
           </section>
         )}

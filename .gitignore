@@ -34,3 +34,11 @@ dist-ssr
 # Environment variables
 .env
 env.env
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Sensitive files
+senhas projeto.txt
+chat-history.md
