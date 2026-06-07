@@ -573,9 +573,18 @@ function Index() {
                 <div className="flex flex-wrap gap-3 items-center">
                   <button
                     onClick={() => exportInstructions(clips, videoTitle, videoId, platform)}
-                    className="font-mono text-[10px] uppercase tracking-widest text-primary border border-primary/40 hover:bg-primary hover:text-primary-foreground px-4 py-2 rounded transition-colors"
+                    className="font-mono text-[10px] uppercase tracking-widest text-primary border border-primary/40 hover:bg-primary hover:text-primary-foreground px-4 py-2 rounded transition-colors cursor-pointer"
                   >
                     ↓ Exportar instruções (.txt)
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => renderMutation.mutate()}
+                    disabled={!canCreateJob || renderMutation.isPending}
+                    className="font-mono text-[10px] uppercase tracking-widest bg-primary text-primary-foreground hover:bg-primary/95 px-4 py-2 rounded transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    {renderMutation.isPending ? "Criando job..." : "Renderizar no meu PC"}
                   </button>
                 </div>
               )}
@@ -755,9 +764,8 @@ function Index() {
           </section>
         )}
 
-        {jobs.length > 0 && (
-          <section className="mt-14 rounded-3xl border border-border bg-surface p-6">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <section className="mt-14 rounded-3xl border border-border bg-surface p-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
                 <p className="text-xs uppercase tracking-widest text-muted-foreground">Fila de renderização</p>
                 <div className="flex items-center gap-3 mt-2 flex-wrap">
@@ -896,7 +904,7 @@ function Index() {
                       <button
                         type="button"
                         onClick={() => publishMutation.mutate(job.id)}
-                        disabled={!canPublishToYoutube || publishMutation.isPending}
+                        disabled={publishMutation.isPending}
                         className="font-mono text-[9px] uppercase tracking-widest bg-primary hover:bg-primary/90 text-primary-foreground px-3 py-1.5 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                       >
                         {publishMutation.isPending ? "Subindo..." : "Subir YouTube"}
@@ -912,7 +920,6 @@ function Index() {
               )}
             </div>
           </section>
-        )}
 
         {clips.length === 0 && !mutation.isPending && (
           <section className="mt-24 grid grid-cols-1 md:grid-cols-4 gap-8 border-t border-border pt-12">
