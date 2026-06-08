@@ -29,6 +29,9 @@ YOUTUBE_CLIENT_ID = os.environ.get("YOUTUBE_CLIENT_ID")
 YOUTUBE_CLIENT_SECRET = os.environ.get("YOUTUBE_CLIENT_SECRET")
 YOUTUBE_REFRESH_TOKEN = os.environ.get("YOUTUBE_REFRESH_TOKEN")
 YOUTUBE_PRIVACY_STATUS = os.environ.get("YOUTUBE_PRIVACY_STATUS", "private")
+APPLY_ANTI_BLOCK = os.environ.get("APPLY_ANTI_BLOCK", "true").lower() in ("1", "true", "yes", "on")
+VIDEO_VERTICAL_STYLE = os.environ.get("VIDEO_VERTICAL_STYLE", "blurred").lower()
+
 
 if not SUPABASE_URL or not SUPABASE_KEY:
     print("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY / SUPABASE_ANON_KEY in environment.")
@@ -123,10 +126,63 @@ def upload_clip_to_youtube(file_path: Path, clip: dict) -> str:
         raise RuntimeError("YouTube auto-publish não está configurado. Defina YOUTUBE_AUTO_PUBLISH e as credenciais do Google.")
 
     from googleapiclient.http import MediaFileUpload
+    import re
 
-    title = (clip.get("title") or "Clip gerado pelo Hook Hustle Engine").strip()[:100]
-    description = (clip.get("hookQuote") or clip.get("justification") or "Clip gerado automaticamente.").strip()[:5000]
-    tags = [tag.strip() for tag in (clip.get("triggers") or []) if tag and tag.strip()][:50]
+    # 1. Optimize Title for CTR (Click-Through Rate)
+    raw_title = (clip.get("title") or "Clip gerado pelo Hook Hustle Engine").strip()
+    
+    # Select a contextual emoji based on clip triggers
+    triggers = clip.get("triggers") or []
+    emoji = " 😱"
+    if "humor" in triggers:
+        emoji = " 😂"
+    elif "controversy" in triggers:
+        emoji = " 🤯"
+    elif "hook" in triggers:
+        emoji = " 👀"
+    elif "emotional" in triggers:
+        emoji = " ❤️"
+
+    # Add emoji to the title if it doesn't already end with punctuation or emoji
+    if not re.search(r"[\u2600-\u27BF\u1F300-\u1F9FF!?!.]$", raw_title):
+        raw_title += emoji
+    
+    title = raw_title.strip()[:100]
+
+    # 2. Build high-converting SEO Description
+    hook = (clip.get("hookQuote") or "").strip()
+    justification = (clip.get("justification") or "").strip()
+    
+    desc_lines = []
+    if hook:
+        desc_lines.append(f'"{hook.upper()}" 🚀')
+        desc_lines.append("")
+    if justification:
+        desc_lines.append(justification)
+        desc_lines.append("")
+        
+    desc_lines.append("📌 Inscreva-se no canal para não perder os próximos cortes virais!")
+    desc_lines.append("🔔 Deixe seu like e ative as notificações para apoiar o canal.")
+    desc_lines.append("")
+    
+    # Generate relevant hashtags based on triggers
+    hashtags = ["#shorts", "#viral", "#corte"]
+    for t in triggers:
+        if t == "humor":
+            hashtags.extend(["#humor", "#engraçado", "#comedia"])
+        elif t == "controversy":
+            hashtags.extend(["#polemica", "#debate", "#reflexao"])
+        elif t == "emotional":
+            hashtags.extend(["#motivacao", "#inspiracao", "#superacao"])
+        elif t == "cliffhanger":
+            hashtags.extend(["#curiosidade", "#suspense", "#fatos"])
+            
+    desc_lines.append(" ".join(list(set(hashtags))))
+    description = "\n".join(desc_lines).strip()[:5000]
+
+    # 3. Optimize tags for SEO searchability
+    tags_list = [t.strip() for t in triggers if t] + ["cortes", "viral", "shorts", "retencao", "hookhustle"]
+    tags = list(set(tags_list))[:50]
 
     body = {
         "snippet": {
@@ -145,6 +201,7 @@ def upload_clip_to_youtube(file_path: Path, clip: dict) -> str:
     request = service.videos().insert(part="snippet,status", body=body, media_body=media)
     response = request.execute()
     return f"https://www.youtube.com/watch?v={response['id']}"
+
 
 
 def sanitize_filename(text: str) -> str:
@@ -175,20 +232,13 @@ def download_video(video_url: str, destination: Path) -> Path:
     return matches[0]
 
 
-def build_ffmpeg_filters() -> str:
-    return (
-        "scale='if(gt(a,9/16),1080,-2)':'if(gt(a,9/16),-2,1920)',"
-        "pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black"
-    )
-
-
 def render_clip(source_path: Path, clip: dict, output_dir: Path) -> Path:
     start = parse_timestamp(clip["startTimestamp"])
     end = parse_timestamp(clip["endTimestamp"])
     title = sanitize_filename(clip.get("title", "clip"))
     output_file = output_dir / f"{title}_{start.replace(':', '-')}_{end.replace(':', '-')}.mp4"
 
-    run_command([
+    cmd = [
         "ffmpeg",
         "-y",
         "-ss",
@@ -197,21 +247,50 @@ def render_clip(source_path: Path, clip: dict, output_dir: Path) -> Path:
         end,
         "-i",
         str(source_path),
-        "-vf",
-        build_ffmpeg_filters(),
-        "-c:v",
-        "libx264",
-        "-preset",
-        "medium",
-        "-crf",
-        "23",
-        "-c:a",
-        "aac",
-        "-b:a",
-        "128k",
+    ]
+
+    # Build video filtergraph
+    if VIDEO_VERTICAL_STYLE == "blurred":
+        # Background stack: upscale to fill canvas, blur, then overlay original video scaled to width
+        v_filter = (
+            "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=20:20[bg];"
+            "[0:v]scale=1080:-2[fg];"
+            "[bg][fg]overlay=(W-w)/2:(H-h)/2"
+        )
+        if APPLY_ANTI_BLOCK:
+            # Subtle speed up (1.01x) and micro color contrast adjustments to bypass duplication detection
+            v_filter += ",setpts=PTS/1.01,eq=contrast=1.01:brightness=0.005"
+        v_filter += "[v]"
+        cmd.extend(["-filter_complex", v_filter, "-map", "[v]", "-map", "0:a"])
+    else:
+        # Traditional black padding style
+        v_filter = (
+            "scale='if(gt(a,9/16),1080,-2)':'if(gt(a,9/16),-2,1920)',"
+            "pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black"
+        )
+        if APPLY_ANTI_BLOCK:
+            v_filter += ",setpts=PTS/1.01,eq=contrast=1.01:brightness=0.005"
+        cmd.extend(["-vf", v_filter])
+
+    # Build audio filters and metadata stripping
+    if APPLY_ANTI_BLOCK:
+        cmd.extend([
+            "-af", "atempo=1.01",
+            "-map_metadata", "-1"
+        ])
+
+    cmd.extend([
+        "-c:v", "libx264",
+        "-preset", "medium",
+        "-crf", "23",
+        "-c:a", "aac",
+        "-b:a", "128k",
         str(output_file),
     ])
+
+    run_command(cmd)
     return output_file
+
 
 
 def process_render_job(job: dict) -> None:
