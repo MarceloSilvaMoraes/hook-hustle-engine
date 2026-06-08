@@ -13,6 +13,8 @@ import { Toaster } from "@/components/ui/sonner";
 import { getGoogleClientId, resolveOAuthRedirectUri } from "@/lib/youtube-auth.functions";
 import { exchangeYoutubeCode } from "@/lib/youtube-auth.server";
 import { publishJobToYoutube } from "@/lib/youtube-publish.functions";
+import { publishJobToTiktok } from "@/lib/tiktok-publish.functions";
+
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -143,6 +145,15 @@ function extractYoutubeLinks(outputPath: string | null): string[] {
     .filter((s) => s.includes("youtube.com/watch") || s.includes("youtu.be/"));
 }
 
+function extractTikTokPublishInfo(outputPath: string | null): string | null {
+  if (!outputPath) return null;
+  const marker = "TikTok:";
+  const idx = outputPath.indexOf(marker);
+  if (idx === -1) return null;
+  return outputPath.slice(idx + marker.length).trim();
+}
+
+
 interface YoutubeProfile {
   name: string;
   refreshToken: string;
@@ -150,6 +161,13 @@ interface YoutubeProfile {
   defaultHashtags?: string;
   defaultTags?: string;
   privacyStatus?: "public" | "private" | "unlisted";
+}
+
+interface TikTokProfile {
+  name: string;
+  sessionCookie: string; // sessionid cookie value from TikTok
+  addedAt: string;
+  defaultHashtags?: string;
 }
 
 function Index() {
@@ -176,6 +194,14 @@ function Index() {
   const [editingTags, setEditingTags] = useState<string>("");
   const [editingPrivacy, setEditingPrivacy] = useState<"public" | "private" | "unlisted">("private");
 
+  // TikTok state
+  const [tiktokProfiles, setTiktokProfiles] = useState<TikTokProfile[]>([]);
+  const [selectedTikTokProfile, setSelectedTikTokProfile] = useState<string>("");
+  const [newTikTokProfileName, setNewTikTokProfileName] = useState<string>("");
+  const [newTikTokSessionCookie, setNewTikTokSessionCookie] = useState<string>("");
+  const [newTikTokHashtags, setNewTikTokHashtags] = useState<string>("#shorts,#tiktok,#viral");
+  const [channelTab, setChannelTab] = useState<"youtube" | "tiktok">("youtube");
+
 
   const analyze = useServerFn(analyzeTranscript);
   const exchange = useServerFn(exchangeYoutubeCode);
@@ -183,6 +209,7 @@ function Index() {
   const createJob = useServerFn(createRenderJob);
   const listJobs = useServerFn(listRenderJobs);
   const publish = useServerFn(publishJobToYoutube);
+  const publishTiktok = useServerFn(publishJobToTiktok);
   const clearJobs = useServerFn(clearOldRenderJobs);
 
   const clearOldJobsMutation = useMutation({
@@ -233,6 +260,16 @@ function Index() {
             target_profile_name: profile.name,
           });
         }
+      } else if (selectedTikTokProfile) {
+        const profile = tiktokProfiles.find(p => p.name === selectedTikTokProfile);
+        if (profile) {
+          jobInstructions = JSON.stringify({
+            target_platform: "tiktok",
+            tiktok_session_cookie: profile.sessionCookie || "",
+            tiktok_profile_name: profile.name,
+            default_hashtags: profile.defaultHashtags || "",
+          });
+        }
       }
 
       const result = await createJob({
@@ -278,6 +315,27 @@ function Index() {
     },
     onSuccess: () => {
       toast.success("Solicitação de publicação enviada ao worker local.");
+      void fetchJobs();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const publishTiktokMutation = useMutation({
+    mutationFn: async ({ jobId, profile }: { jobId: string; profile: TikTokProfile }) => {
+      const tiktokConfig = {
+        target_platform: "tiktok" as const,
+        tiktok_session_cookie: profile.sessionCookie || "",
+        tiktok_profile_name: profile.name,
+        default_hashtags: profile.defaultHashtags || "",
+      };
+      const result = await publishTiktok({ data: { jobId, tiktokConfig } });
+      if (!result.ok) {
+        throw new Error(result.error || "Falha ao publicar no TikTok.");
+      }
+      return result;
+    },
+    onSuccess: () => {
+      toast.success("Solicitação de publicação no TikTok enviada ao worker local.");
       void fetchJobs();
     },
     onError: (e: Error) => toast.error(e.message),
@@ -373,6 +431,23 @@ function Index() {
         window.localStorage.setItem("hook_hustle_youtube_profiles", JSON.stringify(initial));
         setYoutubeProfiles(initial);
       }
+
+      // Load TikTok profiles
+      const savedTikTok = window.localStorage.getItem("hook_hustle_tiktok_profiles") || "";
+      if (savedTikTok) {
+        try {
+          const parsed = JSON.parse(savedTikTok);
+          if (Array.isArray(parsed)) setTiktokProfiles(parsed);
+        } catch {}
+      } else {
+        const ttInitial: TikTokProfile[] = [
+          { name: "Humor TT", sessionCookie: "", addedAt: "", defaultHashtags: "#humor,#comedia,#fyp" },
+          { name: "Futebol TT", sessionCookie: "", addedAt: "", defaultHashtags: "#futebol,#gols,#fyp" },
+          { name: "Tecnologia TT", sessionCookie: "", addedAt: "", defaultHashtags: "#tecnologia,#tech,#fyp" },
+        ];
+        window.localStorage.setItem("hook_hustle_tiktok_profiles", JSON.stringify(ttInitial));
+        setTiktokProfiles(ttInitial);
+      }
     };
 
     syncYoutubeAuth();
@@ -381,6 +456,7 @@ function Index() {
       window.removeEventListener("storage", syncYoutubeAuth);
     };
   }, []);
+
 
   const hasActiveJob = jobs.some((j) => ["pending", "in_progress", "published_requested"].includes(j.status));
 
@@ -570,7 +646,81 @@ function Index() {
     setEditingPrivacy(profile.privacyStatus || "private");
   };
 
+  // ── TikTok handlers ──
+  const handleAddTikTokProfile = () => {
+    if (!newTikTokProfileName.trim()) {
+      toast.error("Insira o nome do perfil TikTok.");
+      return;
+    }
+    const name = newTikTokProfileName.trim();
+    if (tiktokProfiles.some(p => p.name.toLowerCase() === name.toLowerCase())) {
+      toast.error("Já existe um perfil TikTok com este nome.");
+      return;
+    }
+    const updated = [
+      ...tiktokProfiles,
+      {
+        name,
+        sessionCookie: newTikTokSessionCookie.trim(),
+        addedAt: new Date().toISOString(),
+        defaultHashtags: newTikTokHashtags.trim() || "#shorts,#tiktok,#viral",
+      }
+    ];
+    setTiktokProfiles(updated);
+    window.localStorage.setItem("hook_hustle_tiktok_profiles", JSON.stringify(updated));
+    setNewTikTokProfileName("");
+    setNewTikTokSessionCookie("");
+    setNewTikTokHashtags("#shorts,#tiktok,#viral");
+    toast.success(`Perfil TikTok "${name}" adicionado!`);
+  };
 
+  const handleRemoveTikTokProfile = (profileName: string) => {
+    if (confirm(`Remover perfil TikTok "${profileName}"?`)) {
+      const updated = tiktokProfiles.filter(p => p.name !== profileName);
+      setTiktokProfiles(updated);
+      window.localStorage.setItem("hook_hustle_tiktok_profiles", JSON.stringify(updated));
+      if (selectedTikTokProfile === profileName) setSelectedTikTokProfile("");
+      toast.success(`Perfil TikTok "${profileName}" removido.`);
+    }
+  };
+
+  /**
+   * TikTok semi-automatic upload:
+   * Opens TikTok Creator Studio upload page — no API required, no ToS risk.
+   * The worker can also be configured with sessionid cookie to automate this.
+   */
+  const handlePublishTikTok = (jobId: string, profile: TikTokProfile) => {
+    // Find the job to get its output path
+    const job = jobs.find(j => j.id === jobId);
+    const outputPath = job?.output_path || "";
+    const localFiles = outputPath
+      .split(" | ")
+      .filter(s => s.trim() && !s.includes("youtube.com") && !s.includes("Progress:"))
+      .map(s => s.trim());
+
+    // Build instructions payload for the worker
+    const instructions = JSON.stringify({
+      target_platform: "tiktok",
+      tiktok_session_cookie: profile.sessionCookie || "",
+      tiktok_profile_name: profile.name,
+      default_hashtags: profile.defaultHashtags || "#shorts,#tiktok,#viral",
+    });
+
+    // Open TikTok Creator Studio — the user logs in and uploads manually (safe approach)
+    window.open("https://www.tiktok.com/creator-center/upload", "_blank", "noopener,noreferrer");
+
+    if (localFiles.length > 0) {
+      toast.success(
+        `Creator Studio aberto! Seus arquivos estão em:\n${localFiles.slice(0, 3).join("\n")}`,
+        { duration: 8000 }
+      );
+    } else {
+      toast.info("Creator Studio do TikTok aberto. Faça upload dos clipes renderizados.");
+    }
+
+    // Log instructions for future automated worker support
+    console.info("[TikTok] instructions payload:", instructions, jobId);
+  };
 
   const getJobStatusLabel = (status: RenderJob["status"]) => {
     switch (status) {
@@ -623,41 +773,77 @@ function Index() {
     });
   });
 
+  // Extract all TikTok published clips from all jobs that have TikTok upload markers
+  const tiktokPublishedClips = jobs.flatMap((job) => {
+    const isTikTokPub = extractTikTokPublishInfo(job.output_path);
+    if (!isTikTokPub) return [];
+    
+    // Extract local file paths (before YouTube links or progress markers)
+    const files = (job.output_path || "").split(" | ").filter(s => s.trim() && !s.includes("youtube.com") && !s.includes("Progress:") && !s.includes("TikTok:"));
+    const clipItems = (job.clip_items as RenderJobClip[]) || [];
+    
+    return files.map((file, i) => {
+      return {
+        file,
+        title: clipItems[i]?.title || `Clipe ${i + 1}`,
+        jobTitle: job.video_title || job.video_url,
+        publishedAt: job.completed_at || job.created_at,
+        jobId: job.id,
+        profileName: isTikTokPub,
+      };
+    });
+  });
+
+
 
   return (
-    <div className="min-h-screen bg-background text-foreground font-body selection:bg-primary selection:text-white">
-      <Toaster theme="dark" />
+    <div className="min-h-screen bg-background text-foreground font-body selection:bg-primary/30 selection:text-white" style={{background: "radial-gradient(ellipse 80% 50% at 50% -20%, rgba(124,58,237,0.12), transparent), #09090f"}}>
+      <Toaster theme="dark" richColors />
 
-      {/* Header */}
-      <nav className="sticky top-0 z-50 bg-background/80 backdrop-blur-md border-b border-border px-6 h-16 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="size-7 bg-primary rounded-sm flex items-center justify-center">
-            <div className="size-2.5 bg-background rounded-full" />
+      {/* Navbar */}
+      <nav className="sticky top-0 z-50 border-b border-white/[0.07] px-6 h-16 flex items-center justify-between" style={{background: "rgba(9,9,15,0.85)", backdropFilter: "blur(16px)"}}>
+        <div className="flex items-center gap-3">
+          <div className="size-8 rounded-lg flex items-center justify-center" style={{background: "linear-gradient(135deg, #7c3aed, #5b21b6)"}}>
+            <svg viewBox="0 0 24 24" className="size-4 fill-white"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
           </div>
-          <span className="font-display text-2xl tracking-tighter uppercase text-primary">
+          <span className="font-display text-2xl tracking-tighter uppercase" style={{background: "linear-gradient(135deg, #a78bfa, #7c3aed)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text"}}>
             ViralForce.AI
           </span>
         </div>
-        <div className="hidden md:flex gap-6 items-center text-xs font-mono uppercase tracking-widest">
-          <span className="text-primary flex items-center gap-2">
-            <span className="size-1.5 rounded-full bg-primary animate-pulse" />
-            Engine v4.2 Active
+        <div className="hidden md:flex gap-3 items-center">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono font-semibold uppercase tracking-widest" style={{background: "rgba(204,0,0,0.15)", border: "1px solid rgba(204,0,0,0.3)", color: "#ff6b6b"}}>
+            <svg viewBox="0 0 24 24" className="size-2.5 fill-current"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+            YouTube
           </span>
-          <span className="text-muted-foreground">AI-Powered Clip Extraction</span>
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono font-semibold uppercase tracking-widest" style={{background: "rgba(254,44,85,0.12)", border: "1px solid rgba(254,44,85,0.28)", color: "#fe2c55"}}>
+            <svg viewBox="0 0 24 24" className="size-2.5 fill-current"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05A6.34 6.34 0 003.15 15.3a6.34 6.34 0 006.34 6.35 6.34 6.34 0 006.34-6.35V9.01a8.27 8.27 0 004.85 1.56V7.12a4.85 4.85 0 01-1.09-.43z"/></svg>
+            TikTok
+          </span>
+          <span className="inline-flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+            <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            Engine v4.2
+          </span>
         </div>
       </nav>
 
       <main className="max-w-7xl mx-auto px-6 py-12">
         {/* Hero */}
-        <header className="mb-12 max-w-3xl animate-entry">
-          <h1 className="font-display text-5xl md:text-7xl uppercase tracking-tighter leading-[0.95] mb-4">
-            Extraia <span className="text-primary italic">virais</span>
+        <header className="mb-14 max-w-3xl animate-entry">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-mono uppercase tracking-widest mb-4" style={{background: "rgba(124,58,237,0.12)", border: "1px solid rgba(124,58,237,0.25)", color: "#a78bfa"}}>
+            <span className="size-1.5 rounded-full bg-violet-400 animate-pulse" />
+            AI-Powered · YouTube · TikTok · Reels
+          </div>
+          <h1 className="font-display text-5xl md:text-7xl uppercase tracking-tighter leading-[0.92] mb-5">
+            Extraia{" "}
+            <span style={{background: "linear-gradient(135deg, #a78bfa, #7c3aed, #ec4899)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text"}}>
+              virais
+            </span>
             <br />
             do seu conteúdo longo
           </h1>
-          <p className="text-muted-foreground text-lg max-w-xl">
+          <p className="text-muted-foreground text-lg max-w-xl leading-relaxed">
             Cole a transcrição. A IA identifica hooks, cliffhangers e picos de
-            retenção — devolve 5 clipes prontos pra TikTok, Reels e Shorts.
+            retenção — devolve 5 clipes prontos pra <span className="text-red-400 font-semibold">YouTube</span>, <span className="text-pink-400 font-semibold">TikTok</span> e Reels.
           </p>
         </header>
 
@@ -673,148 +859,173 @@ function Index() {
                 value={sourceUrl}
                 onChange={(e) => setSourceUrl(e.target.value)}
                 placeholder="Cole o link do YouTube (vídeo ou Short)"
-                className="flex-1 bg-surface border border-border rounded-lg px-4 py-3 font-mono text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                className="flex-1 input-base"
               />
               <button
                 onClick={() => fetchMutation.mutate()}
                 disabled={!sourceUrl.trim() || fetchMutation.isPending}
-                className="bg-surface border border-primary text-primary hover:bg-primary hover:text-primary-foreground font-display uppercase tracking-wider text-sm px-6 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                className="btn btn-ghost shrink-0 px-5 py-3 text-[11px]"
               >
                 {fetchMutation.isPending ? "Buscando..." : "Importar"}
               </button>
             </div>
-            {/* Multi-Channel Profiles Manager */}
-            <div className="mb-6 rounded-2xl border border-primary/20 bg-primary/5 p-5">
-              <h3 className="font-display text-lg uppercase tracking-tight text-primary flex items-center gap-2 mb-2">
-                <svg viewBox="0 0 24 24" className="size-4 fill-current"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
-                Canais do YouTube (Multi-Perfil)
-              </h3>
-              <p className="text-xs text-muted-foreground mb-4">
-                Conecte múltiplos canais do YouTube (ex: Humor, Futebol, Tecnologia) e escolha para onde enviar cada clipe de forma rápida.
-              </p>
-
-              {/* Add Profile Form */}
-              <div className="flex gap-2 mb-4">
-                <input
-                  type="text"
-                  value={newProfileName}
-                  onChange={(e) => setNewProfileName(e.target.value)}
-                  placeholder="Nome do Canal (ex: Canal de Futebol)"
-                  className="flex-1 bg-background border border-border hover:border-primary/50 focus:border-primary focus:ring-1 focus:ring-primary/30 rounded-xl px-4 py-2.5 text-xs font-mono outline-none transition-all placeholder:text-muted-foreground/40"
-                />
-                <button
-                  type="button"
-                  onClick={handleAddProfile}
-                  className="bg-primary hover:bg-primary/95 text-primary-foreground font-mono text-[10px] uppercase tracking-widest px-5 py-2.5 rounded-xl transition-all active:scale-[0.98] shadow-[0_4px_12px_rgba(120,119,198,0.3)] hover:shadow-[0_6px_18px_rgba(120,119,198,0.45)] cursor-pointer"
-                >
-                  Adicionar
-                </button>
+            {/* ── Multi-Platform Channel Manager ── */}
+            <div className="mb-6 rounded-2xl p-5" style={{background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)"}}>
+              {/* Tab header */}
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+                <div className="flex rounded-xl overflow-hidden border border-white/10" style={{background: "rgba(0,0,0,0.3)"}}>
+                  <button
+                    type="button"
+                    onClick={() => setChannelTab("youtube")}
+                    className={`flex items-center gap-2 px-4 py-2 text-[11px] font-mono font-semibold uppercase tracking-widest transition-all cursor-pointer ${channelTab === "youtube" ? "text-white" : "text-muted-foreground hover:text-red-400"}`}
+                    style={channelTab === "youtube" ? {background: "rgba(204,0,0,0.85)"} : {}}
+                  >
+                    <svg viewBox="0 0 24 24" className="size-3 fill-current"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    YouTube ({youtubeProfiles.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChannelTab("tiktok")}
+                    className={`flex items-center gap-2 px-4 py-2 text-[11px] font-mono font-semibold uppercase tracking-widest transition-all cursor-pointer ${channelTab === "tiktok" ? "text-white" : "text-muted-foreground hover:text-pink-400"}`}
+                    style={channelTab === "tiktok" ? {background: "linear-gradient(135deg, #fe2c55, #010101)"} : {}}
+                  >
+                    <svg viewBox="0 0 24 24" className="size-3 fill-current"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05A6.34 6.34 0 003.15 15.3a6.34 6.34 0 006.34 6.35 6.34 6.34 0 006.34-6.35V9.01a8.27 8.27 0 004.85 1.56V7.12a4.85 4.85 0 01-1.09-.43z"/></svg>
+                    TikTok ({tiktokProfiles.length})
+                  </button>
+                </div>
+                <p className="text-[10px] font-mono text-muted-foreground">
+                  {channelTab === "youtube" ? "Autenticação OAuth2 via Google" : "Upload semi-automático via Creator Studio"}
+                </p>
               </div>
 
-              {/* Profiles List */}
-              <div className="space-y-3">
-                {youtubeProfiles.map((profile) => {
-                  const isEditing = editingProfileName === profile.name;
-                  return (
-                    <div key={profile.name} className="p-4 rounded-2xl border border-border bg-background/30 hover:bg-background/50 transition-colors shadow-inner">
-                      <div className="flex items-center justify-between gap-3 flex-wrap">
-                        <div className="min-w-0">
-                          <div className="font-semibold text-xs text-foreground flex items-center gap-2">
-                            <span className="size-2 rounded-full animate-pulse" style={{ backgroundColor: profile.refreshToken ? "#10b981" : "#ef4444" }} />
-                            {profile.name}
+              {/* ── YouTube Tab ── */}
+              {channelTab === "youtube" && (
+                <div>
+                  <div className="flex gap-2 mb-4">
+                    <input
+                      type="text"
+                      value={newProfileName}
+                      onChange={(e) => setNewProfileName(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleAddProfile()}
+                      placeholder="Nome do canal (ex: Canal Futebol)"
+                      className="flex-1 input-base"
+                    />
+                    <button type="button" onClick={handleAddProfile} className="btn btn-primary shrink-0">
+                      + Adicionar
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {youtubeProfiles.map((profile) => {
+                      const isEditing = editingProfileName === profile.name;
+                      return (
+                        <div key={profile.name} className="p-3 rounded-xl" style={{background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)"}}>
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <div className="min-w-0 flex items-center gap-2">
+                              <span className="size-2 rounded-full" style={{backgroundColor: profile.refreshToken ? "#10b981" : "#6b7280"}} />
+                              <span className="text-sm font-semibold">{profile.name}</span>
+                              <span className="text-[10px] font-mono text-muted-foreground">
+                                {profile.refreshToken ? `Conectado · ${profile.privacyStatus || "private"}` : "Não conectado"}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <button type="button" onClick={() => handleConnectProfile(profile.name)}
+                                className={`btn ${profile.refreshToken ? "btn-success" : "btn-youtube"}`}>
+                                {profile.refreshToken ? "Reconectar" : "Conectar Google"}
+                              </button>
+                              <button type="button" onClick={() => isEditing ? handleSaveProfileSettings(profile.name) : handleStartEditProfile(profile)}
+                                className="btn btn-ghost">
+                                {isEditing ? "Salvar" : "Config"}
+                              </button>
+                              <button type="button" onClick={() => handleRemoveProfile(profile.name)} className="btn btn-danger">
+                                ✕
+                              </button>
+                            </div>
                           </div>
-                          <div className="text-[10px] text-muted-foreground font-mono mt-1">
-                            {profile.refreshToken 
-                              ? `Conectado em ${new Date(profile.connectedAt).toLocaleDateString("pt-BR")} · Status: ${profile.privacyStatus || "private"}`
-                              : "Não autenticado com o Google"
-                            }
-                          </div>
+                          {isEditing && (
+                            <div className="mt-3 pt-3 border-t border-white/[0.06] grid gap-2 grid-cols-1 sm:grid-cols-3">
+                              <div>
+                                <label className="font-mono text-[9px] text-muted-foreground uppercase block mb-1">Hashtags</label>
+                                <input type="text" value={editingHashtags} onChange={(e) => setEditingHashtags(e.target.value)} placeholder="#shorts,#viral" className="input-base text-[11px] py-1.5"/>
+                              </div>
+                              <div>
+                                <label className="font-mono text-[9px] text-muted-foreground uppercase block mb-1">Tags SEO</label>
+                                <input type="text" value={editingTags} onChange={(e) => setEditingTags(e.target.value)} placeholder="tag1,tag2" className="input-base text-[11px] py-1.5"/>
+                              </div>
+                              <div>
+                                <label className="font-mono text-[9px] text-muted-foreground uppercase block mb-1">Privacidade</label>
+                                <select value={editingPrivacy} onChange={(e) => setEditingPrivacy(e.target.value as any)}
+                                  className="input-base text-[11px] py-1.5 cursor-pointer">
+                                  <option value="private">Privado</option>
+                                  <option value="public">Público</option>
+                                  <option value="unlisted">Não Listado</option>
+                                </select>
+                              </div>
+                            </div>
+                          )}
                         </div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <button
-                            type="button"
-                            onClick={() => handleConnectProfile(profile.name)}
-                            className={`font-mono text-[9px] uppercase tracking-widest px-3.5 py-2 rounded-xl transition-all cursor-pointer ${
-                              profile.refreshToken
-                                ? "bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 hover:bg-emerald-500/20"
-                                : "bg-red-600 hover:bg-red-700 text-white shadow-[0_4px_12px_rgba(220,38,38,0.25)] hover:shadow-[0_6px_16px_rgba(220,38,38,0.4)]"
-                            }`}
-                          >
-                            {profile.refreshToken ? "Reconectar" : "Conectar Google"}
+                      );
+                    })}
+                  </div>
+                  <p className="mt-3 text-[10px] font-mono text-muted-foreground/50">
+                    Redirect URI: <span className="text-violet-400">{redirectUri || "Carregando..."}</span>
+                  </p>
+                </div>
+              )}
+
+              {/* ── TikTok Tab ── */}
+              {channelTab === "tiktok" && (
+                <div>
+                  <div className="mb-4 p-3 rounded-xl text-xs font-mono" style={{background: "rgba(254,44,85,0.07)", border: "1px solid rgba(254,44,85,0.18)"}}>
+                    <div className="flex items-start gap-2">
+                      <svg viewBox="0 0 24 24" className="size-4 fill-pink-400 shrink-0 mt-0.5"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05A6.34 6.34 0 003.15 15.3a6.34 6.34 0 006.34 6.35 6.34 6.34 0 006.34-6.35V9.01a8.27 8.27 0 004.85 1.56V7.12a4.85 4.85 0 01-1.09-.43z"/></svg>
+                      <div>
+                        <p className="text-pink-400 font-semibold mb-1">Upload Semi-Automático (Seguro)</p>
+                        <p className="text-muted-foreground leading-relaxed">
+                          O TikTok não possui API de upload pública. Ao clicar em <strong className="text-foreground">"Subir TikTok"</strong> em um job pronto,
+                          o <strong className="text-foreground">Creator Studio</strong> abre automaticamente no browser — você só precisa fazer o upload.
+                          Você pode ter <strong className="text-foreground">múltiplos perfis</strong> e logar em contas diferentes simultaneamente usando perfis do Chrome/Edge separados.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Add TikTok profile */}
+                  <div className="space-y-2 mb-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <input type="text" value={newTikTokProfileName} onChange={(e) => setNewTikTokProfileName(e.target.value)}
+                        placeholder="Nome do perfil (ex: Humor TT)" className="input-base"/>
+                      <input type="text" value={newTikTokHashtags} onChange={(e) => setNewTikTokHashtags(e.target.value)}
+                        placeholder="#shorts,#tiktok,#viral" className="input-base"/>
+                    </div>
+                    <button type="button" onClick={handleAddTikTokProfile} className="btn btn-tiktok w-full justify-center py-2.5">
+                      <svg viewBox="0 0 24 24" className="size-3.5 fill-current"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05A6.34 6.34 0 003.15 15.3a6.34 6.34 0 006.34 6.35 6.34 6.34 0 006.34-6.35V9.01a8.27 8.27 0 004.85 1.56V7.12a4.85 4.85 0 01-1.09-.43z"/></svg>
+                      Adicionar Perfil TikTok
+                    </button>
+                  </div>
+
+                  <div className="space-y-2">
+                    {tiktokProfiles.map((profile) => (
+                      <div key={profile.name} className="p-3 rounded-xl flex items-center justify-between gap-2 flex-wrap" style={{background: "rgba(254,44,85,0.05)", border: "1px solid rgba(254,44,85,0.14)"}}>
+                        <div className="min-w-0 flex items-center gap-2">
+                          <svg viewBox="0 0 24 24" className="size-3.5 fill-pink-500 shrink-0"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05A6.34 6.34 0 003.15 15.3a6.34 6.34 0 006.34 6.35 6.34 6.34 0 006.34-6.35V9.01a8.27 8.27 0 004.85 1.56V7.12a4.85 4.85 0 01-1.09-.43z"/></svg>
+                          <span className="text-sm font-semibold">{profile.name}</span>
+                          <span className="text-[10px] font-mono text-muted-foreground">{profile.defaultHashtags}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <button type="button"
+                            onClick={() => { window.open("https://www.tiktok.com/login", "_blank"); toast.info(`Faça login no TikTok como "${profile.name}" no browser que abriu.`); }}
+                            className="btn btn-tiktok">
+                            Abrir TikTok
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (isEditing) {
-                                handleSaveProfileSettings(profile.name);
-                              } else {
-                                handleStartEditProfile(profile);
-                              }
-                            }}
-                            className="font-mono text-[9px] uppercase tracking-widest bg-primary text-primary-foreground hover:bg-primary/95 px-3.5 py-2 rounded-xl transition-all shadow-[0_4px_12px_rgba(120,119,198,0.25)] hover:shadow-[0_6px_16px_rgba(120,119,198,0.4)] cursor-pointer"
-                          >
-                            {isEditing ? "Salvar" : "Configurar"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveProfile(profile.name)}
-                            className="font-mono text-[9px] uppercase tracking-widest border border-destructive/25 text-destructive hover:bg-destructive/10 px-3.5 py-2 rounded-xl transition-all cursor-pointer"
-                          >
-                            Remover
-                          </button>
+                          <button type="button" onClick={() => handleRemoveTikTokProfile(profile.name)} className="btn btn-danger">✕</button>
                         </div>
                       </div>
-
-                      {/* Edit Profile Configuration Details */}
-                      {isEditing && (
-                        <div className="mt-4 pt-4 border-t border-border/60 grid gap-3 grid-cols-1 sm:grid-cols-3 text-xs">
-                          <div>
-                            <label className="font-mono text-[10px] text-muted-foreground uppercase block mb-1">Hashtags Padrão</label>
-                            <input
-                              type="text"
-                              value={editingHashtags}
-                              onChange={(e) => setEditingHashtags(e.target.value)}
-                              placeholder="#shorts,#viral,#meucanal"
-                              className="w-full bg-background border border-border hover:border-primary/50 focus:border-primary focus:ring-1 focus:ring-primary/30 rounded-xl px-3 py-2 font-mono text-[11px] outline-none transition-all"
-                            />
-                          </div>
-                          <div>
-                            <label className="font-mono text-[10px] text-muted-foreground uppercase block mb-1">Tags Padrão</label>
-                            <input
-                              type="text"
-                              value={editingTags}
-                              onChange={(e) => setEditingTags(e.target.value)}
-                              placeholder="tag1,tag2,tag3"
-                              className="w-full bg-background border border-border hover:border-primary/50 focus:border-primary focus:ring-1 focus:ring-primary/30 rounded-xl px-3 py-2 font-mono text-[11px] outline-none transition-all"
-                            />
-                          </div>
-                          <div>
-                            <label className="font-mono text-[10px] text-muted-foreground uppercase block mb-1">Privacidade</label>
-                            <select
-                              value={editingPrivacy}
-                              onChange={(e) => setEditingPrivacy(e.target.value as any)}
-                              className="w-full bg-background border border-border hover:border-primary/50 focus:border-primary focus:ring-1 focus:ring-primary/30 rounded-xl px-3 py-2 font-mono text-[11px] outline-none transition-all cursor-pointer"
-                            >
-                              <option value="private">Privado (Private)</option>
-                              <option value="public">Público (Public)</option>
-                              <option value="unlisted">Não Listado (Unlisted)</option>
-                            </select>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Status Hint */}
-              <p className="mt-4 text-[10px] font-mono uppercase tracking-widest text-muted-foreground/60">
-                Redirecionamento autorizado: <span className="text-primary">{redirectUri || "Carregando..."}</span>
-              </p>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-            <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground/60 mb-4">
-              YouTube/Shorts via legenda automática · TikTok/Reels/X: cole a transcrição manualmente abaixo
-            </p>
+
 
             <label className="font-display text-xs uppercase tracking-widest text-muted-foreground mb-2 block">
               Raw Transcript
@@ -876,7 +1087,7 @@ function Index() {
               </select>
             </div>
 
-            <div className="p-6 rounded-xl bg-primary/10 border border-primary/20">
+            <div className="p-6 rounded-2xl" style={{background: "rgba(124,58,237,0.1)", border: "1px solid rgba(124,58,237,0.25)"}}>
               <h3 className="font-display text-xl uppercase mb-2">Pro Engine v4.2</h3>
               <p className="text-sm text-muted-foreground mb-6">
                 Analisa hooks, picos de retenção e justificativa viral com base em
@@ -885,9 +1096,15 @@ function Index() {
               <button
                 onClick={() => mutation.mutate()}
                 disabled={!canAnalyze}
-                className="w-full bg-primary hover:bg-primary/95 text-primary-foreground font-display text-lg py-4 rounded-xl transition-all active:scale-[0.98] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_12px_30px_-12px_rgba(120,119,198,0.75)] hover:shadow-[0_18px_36px_-12px_rgba(120,119,198,0.95)] ring-1 ring-primary/40"
+                className="w-full font-display text-base py-4 rounded-xl transition-all active:scale-[0.98] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{
+                  background: canAnalyze ? "linear-gradient(135deg, #7c3aed, #6d28d9)" : "rgba(124,58,237,0.3)",
+                  color: "#fff",
+                  boxShadow: canAnalyze ? "0 12px 32px -8px rgba(124,58,237,0.7)" : "none",
+                  border: "1px solid rgba(124,58,237,0.4)",
+                }}
               >
-                {mutation.isPending ? "ANALISANDO..." : "ANALISAR CONTEÚDO"}
+                {mutation.isPending ? "⚡ ANALISANDO..." : "⚡ ANALISAR CONTEÚDO"}
               </button>
               {transcript.trim().length > 0 && transcript.trim().length < 50 && (
                 <p className="mt-3 text-xs text-destructive">
@@ -906,21 +1123,21 @@ function Index() {
                 Top Viral Clips {clips.length > 0 && <span className="text-muted-foreground">({String(clips.length).padStart(2, "0")})</span>}
               </h2>
               {clips.length > 0 && (
-                <div className="flex flex-wrap gap-3 items-center">
+                <div className="flex flex-wrap gap-2 items-center">
                   <button
                     onClick={() => exportInstructions(clips, videoTitle, videoId, platform)}
-                    className="font-mono text-[10px] uppercase tracking-widest text-primary border border-primary/40 hover:bg-primary hover:text-primary-foreground px-4 py-2 rounded transition-colors cursor-pointer"
+                    className="btn btn-ghost"
                   >
-                    ↓ Exportar instruções (.txt)
+                    ↓ Exportar (.txt)
                   </button>
 
                   <button
                     type="button"
                     onClick={() => renderMutation.mutate()}
                     disabled={!canCreateJob || renderMutation.isPending}
-                    className="font-mono text-[10px] uppercase tracking-widest bg-primary text-primary-foreground hover:bg-primary/95 px-4 py-2 rounded transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                    className="btn btn-primary"
                   >
-                    {renderMutation.isPending ? "Criando job..." : "Renderizar no meu PC"}
+                    {renderMutation.isPending ? "Criando job..." : "⚡ Renderizar no PC"}
                   </button>
                 </div>
               )}
@@ -1144,79 +1361,78 @@ function Index() {
                 <button
                   onClick={() => clearOldJobsMutation.mutate()}
                   disabled={clearOldJobsMutation.isPending || !jobs.some(j => ["done", "completed", "failed"].includes(j.status))}
-                  className="font-mono text-[10px] uppercase tracking-widest border border-destructive/40 text-destructive hover:bg-destructive/10 px-4 py-2 rounded-lg transition-colors disabled:opacity-40 cursor-pointer"
+                  className="btn btn-danger"
                 >
                   {clearOldJobsMutation.isPending ? "Limpando..." : "Limpar Histórico"}
                 </button>
                 <button
                   onClick={() => fetchJobs()}
-                  className="font-mono text-[10px] uppercase tracking-widest border border-primary/40 text-primary px-4 py-2 rounded-lg hover:bg-primary/10 transition-colors cursor-pointer"
+                  className="btn btn-ghost"
                 >
-                  Atualizar status
+                  ↻ Atualizar
                 </button>
               </div>
             </div>
 
-            {/* Quick Channel Switcher */}
-            {youtubeProfiles.length > 0 && (
-              <div className="mt-5 p-4 rounded-2xl border border-border/70 bg-background/40">
-                <div className="flex items-center gap-3 flex-wrap">
-                  <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground shrink-0">
-                    Canal ativo:
-                  </span>
-                  {/* "Sem upload" pill */}
-                  <button
-                    type="button"
-                    onClick={() => setSelectedProfile("")}
-                    className={`inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest px-3 py-1.5 rounded-full transition-all cursor-pointer ${
-                      selectedProfile === ""
-                        ? "bg-surface border border-primary text-primary shadow-[0_0_12px_-4px_rgba(120,119,198,0.6)]"
-                        : "border border-border text-muted-foreground hover:border-primary/40 hover:text-primary"
-                    }`}
-                  >
-                    <span className="size-1.5 rounded-full bg-current opacity-60" />
-                    Sem upload
-                  </button>
-                  {youtubeProfiles.map((profile) => {
-                    const isActive = selectedProfile === profile.name;
-                    const isConnected = Boolean(profile.refreshToken);
-                    return (
-                      <button
-                        key={profile.name}
-                        type="button"
-                        onClick={() => {
-                          if (!isConnected) {
-                            toast.error(`Canal "${profile.name}" não está autenticado. Conecte o Google primeiro.`);
-                            return;
-                          }
-                          setSelectedProfile(isActive ? "" : profile.name);
-                        }}
-                        title={!isConnected ? "Canal não autenticado — conecte o Google primeiro" : `Enviar para ${profile.name}`}
-                        className={`inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest px-3 py-1.5 rounded-full transition-all cursor-pointer ${
-                          isActive
-                            ? "bg-primary text-primary-foreground shadow-[0_4px_16px_-4px_rgba(120,119,198,0.7)]"
-                            : isConnected
-                            ? "border border-border text-muted-foreground hover:border-primary/50 hover:text-primary hover:bg-primary/5"
-                            : "border border-border/40 text-muted-foreground/40 cursor-not-allowed"
-                        }`}
-                      >
-                        <span className={`size-1.5 rounded-full ${isConnected ? (isActive ? "bg-white" : "bg-emerald-400") : "bg-destructive/60"}`} />
-                        {profile.name}
-                        {!isConnected && <span className="text-[8px] opacity-60 ml-0.5">✕</span>}
-                      </button>
-                    );
-                  })}
-                  {selectedProfile && (
-                    <span className="ml-auto text-[10px] font-mono text-primary flex items-center gap-1">
-                      <svg viewBox="0 0 24 24" className="size-3 fill-current" aria-hidden="true"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
-                      Próximo job → {selectedProfile}
-                    </span>
-                  )}
+            {/* Quick Platform Switcher */}
+            {(youtubeProfiles.length > 0 || tiktokProfiles.length > 0) && (
+              <div className="mt-5 p-4 rounded-2xl" style={{background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)"}}>
+                <div className="flex items-start gap-3 flex-wrap">
+                  <span className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground shrink-0 mt-1.5">Destino:</span>
+                  <div className="flex flex-wrap gap-2 flex-1">
+                    {/* No upload */}
+                    <button type="button" onClick={() => { setSelectedProfile(""); setSelectedTikTokProfile(""); }}
+                      className={`inline-flex items-center gap-1 text-[10px] font-mono uppercase tracking-wider px-2.5 py-1 rounded-full transition-all cursor-pointer ${!selectedProfile && !selectedTikTokProfile ? "bg-white/10 border border-white/25 text-foreground" : "border border-white/10 text-muted-foreground hover:border-white/20"}`}>
+                      <span className="size-1.5 rounded-full bg-white/30" />Sem upload
+                    </button>
+
+                    {/* YouTube profiles */}
+                    {youtubeProfiles.map(p => {
+                      const isActive = selectedProfile === p.name;
+                      const ok = Boolean(p.refreshToken);
+                      return (
+                        <button key={`yt-${p.name}`} type="button"
+                          onClick={() => { if (!ok) { toast.error(`"${p.name}" não autenticado`); return; } setSelectedProfile(isActive ? "" : p.name); setSelectedTikTokProfile(""); }}
+                          className={`inline-flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider px-2.5 py-1 rounded-full transition-all cursor-pointer ${
+                            isActive ? "text-white" : ok ? "border border-white/10 text-muted-foreground hover:border-red-500/30 hover:text-red-400" : "border border-white/[0.07] text-white/20 cursor-not-allowed"
+                          }`}
+                          style={isActive ? {background: "rgba(204,0,0,0.9)", border: "1px solid rgba(204,0,0,0.4)"} : {}}>
+                          <svg viewBox="0 0 24 24" className="size-2.5 fill-current"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                          {p.name}
+                          {!ok && <span className="text-[8px] opacity-50">✕</span>}
+                        </button>
+                      );
+                    })}
+
+                    {/* TikTok profiles */}
+                    {tiktokProfiles.map(p => {
+                      const isActive = selectedTikTokProfile === p.name;
+                      return (
+                        <button key={`tt-${p.name}`} type="button"
+                          onClick={() => { setSelectedTikTokProfile(isActive ? "" : p.name); setSelectedProfile(""); }}
+                          className={`inline-flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider px-2.5 py-1 rounded-full transition-all cursor-pointer ${
+                            isActive ? "text-white" : "border border-pink-500/20 text-pink-400/60 hover:border-pink-500/40 hover:text-pink-400"
+                          }`}
+                          style={isActive ? {background: "linear-gradient(135deg, #fe2c55, #1a1a1a)", border: "1px solid rgba(254,44,85,0.5)"} : {}}>
+                          <svg viewBox="0 0 24 24" className="size-2.5 fill-current"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05A6.34 6.34 0 003.15 15.3a6.34 6.34 0 006.34 6.35 6.34 6.34 0 006.34-6.35V9.01a8.27 8.27 0 004.85 1.56V7.12a4.85 4.85 0 01-1.09-.43z"/></svg>
+                          {p.name}
+                        </button>
+                      );
+                    })}
+
+                    {/* Active label */}
+                    {(selectedProfile || selectedTikTokProfile) && (
+                      <span className="ml-auto text-[10px] font-mono text-muted-foreground flex items-center gap-1">
+                        Próximo job → {selectedProfile ? `YT: ${selectedProfile}` : `TT: ${selectedTikTokProfile}`}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
 
             {/* Active Job Card */}
+
             {processingJob && (
               <div className="mt-6 rounded-3xl border border-primary/30 bg-primary/5 p-6 shadow-[0_8px_32px_0_rgba(120,119,198,0.08)] backdrop-blur-sm relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-3 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-primary bg-primary/10 rounded-bl-2xl">
@@ -1245,7 +1461,7 @@ function Index() {
                         }
                       }}
                       disabled={retryMutation.isPending}
-                      className="font-mono text-[9px] uppercase tracking-widest border border-amber-500/40 text-amber-500 hover:bg-amber-500/10 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                      className="btn btn-warning"
                     >
                       {retryMutation.isPending ? "Reiniciando..." : "Reiniciar"}
                     </button>
@@ -1257,7 +1473,7 @@ function Index() {
                         }
                       }}
                       disabled={deleteMutation.isPending}
-                      className="font-mono text-[9px] uppercase tracking-widest border border-destructive/40 text-destructive hover:bg-destructive/10 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                      className="btn btn-danger"
                     >
                       {deleteMutation.isPending ? "Excluindo..." : "Excluir"}
                     </button>
@@ -1370,6 +1586,55 @@ function Index() {
               </div>
             )}
 
+            {/* TikTok Published Videos Gallery */}
+            {tiktokPublishedClips.length > 0 && (
+              <div className="mt-6 border-t border-border/40 pt-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="size-7 rounded-lg flex items-center justify-center bg-black border border-pink-500/30">
+                      <svg viewBox="0 0 24 24" className="size-4 fill-pink-500"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05A6.34 6.34 0 003.15 15.3a6.34 6.34 0 006.34 6.35 6.34 6.34 0 006.34-6.35V9.01a8.27 8.27 0 004.85 1.56V7.12a4.85 4.85 0 01-1.09-.43z"/></svg>
+                    </div>
+                    <div>
+                      <h3 className="font-display text-lg tracking-tight">Publicados no TikTok</h3>
+                      <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">{tiktokPublishedClips.length} clipe{tiktokPublishedClips.length !== 1 ? "s" : ""} enviado{tiktokPublishedClips.length !== 1 ? "s" : ""}</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {tiktokPublishedClips.map((clip, idx) => (
+                    <div
+                      key={`${clip.jobId}-${idx}`}
+                      className="group block rounded-2xl overflow-hidden border border-border/60 bg-background/50 hover:border-pink-500/40 hover:bg-pink-500/5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-pink-500/10"
+                    >
+                      {/* Thumbnail */}
+                      <div className="relative aspect-video bg-surface overflow-hidden flex items-center justify-center">
+                        <div className="size-10 rounded-full bg-pink-500/10 flex items-center justify-center border border-pink-500/20">
+                          <svg viewBox="0 0 24 24" className="size-5 fill-pink-500"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05A6.34 6.34 0 003.15 15.3a6.34 6.34 0 006.34 6.35 6.34 6.34 0 006.34-6.35V9.01a8.27 8.27 0 004.85 1.56V7.12a4.85 4.85 0 01-1.09-.43z"/></svg>
+                        </div>
+                        {/* Index badge */}
+                        <div className="absolute top-2 left-2 bg-black/70 rounded-md px-1.5 py-0.5 font-mono text-[9px] text-white uppercase tracking-widest">
+                          Clipe {idx + 1}
+                        </div>
+                      </div>
+                      {/* Info */}
+                      <div className="p-3">
+                        <div className="font-semibold text-sm text-foreground line-clamp-2 leading-snug">
+                          {clip.title}
+                        </div>
+                        <div className="mt-1.5 flex items-center justify-between text-[10px] text-muted-foreground font-mono">
+                          <span className="truncate max-w-[120px]">{clip.jobTitle}</span>
+                          <span className="text-pink-400 font-bold bg-pink-500/5 px-1.5 py-0.5 rounded border border-pink-500/10">{clip.profileName}</span>
+                        </div>
+                        <div className="mt-1 text-[10px] text-muted-foreground font-mono">
+                          {new Date(clip.publishedAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Compact History List */}
             <div className="mt-6 flex flex-col gap-3">
               <h3 className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-1">Histórico de Jobs</h3>
@@ -1408,6 +1673,16 @@ function Index() {
                         </div>
                       )}
 
+                      {extractTikTokPublishInfo(job.output_path) && (
+                        <div className="mt-2.5 flex flex-wrap gap-1.5 items-center">
+                          <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest mr-1">TikTok:</span>
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-pink-500/10 border border-pink-500/25 text-[11px] font-mono text-pink-400 font-semibold">
+                            <svg viewBox="0 0 24 24" className="size-2.5 fill-current"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05A6.34 6.34 0 003.15 15.3a6.34 6.34 0 006.34 6.35 6.34 6.34 0 006.34-6.35V9.01a8.27 8.27 0 004.85 1.56V7.12a4.85 4.85 0 01-1.09-.43z"/></svg>
+                            {extractTikTokPublishInfo(job.output_path)}
+                          </span>
+                        </div>
+                      )}
+
                     {job.error_message && (
                       <div className="mt-1.5 text-xs text-destructive/90 font-mono bg-destructive/5 border border-destructive/10 rounded px-2 py-1 flex items-start gap-1">
                         <span className="font-bold shrink-0">Erro:</span>
@@ -1415,7 +1690,7 @@ function Index() {
                       </div>
                     )}
                   </div>
-                  <div className="flex items-center gap-3 shrink-0">
+                  <div className="flex items-center gap-2 shrink-0 flex-wrap md:flex-nowrap">
                     <span className="rounded-full px-2.5 py-0.5 text-[10px] font-mono uppercase tracking-wider border"
                       style={{
                         backgroundColor:
@@ -1448,7 +1723,6 @@ function Index() {
                     </span>
                     {isJobReadyToPublish(job.status) && (() => {
                       const connectedProfiles = youtubeProfiles.filter(p => p.refreshToken);
-                      // If there's an active selected profile from the Quick Channel Switcher, use it directly
                       const activeProfile = selectedProfile
                         ? connectedProfiles.find(p => p.name === selectedProfile)
                         : null;
@@ -1459,23 +1733,24 @@ function Index() {
                             type="button"
                             onClick={() => publishMutation.mutate({ jobId: job.id, profile: activeProfile })}
                             disabled={publishMutation.isPending}
-                            className="font-mono text-[9px] uppercase tracking-widest bg-primary hover:bg-primary/90 text-primary-foreground px-3 py-1.5 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1.5"
+                            className="btn btn-youtube"
                           >
-                            <svg viewBox="0 0 24 24" className="size-2.5 fill-current" aria-hidden="true"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
-                            {publishMutation.isPending ? "Subindo..." : `→ ${activeProfile.name}`}
+                            <svg viewBox="0 0 24 24" className="size-3 fill-current" aria-hidden="true"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                            {publishMutation.isPending ? "Subindo..." : activeProfile.name}
                           </button>
                         );
                       }
 
-                      if (connectedProfiles.length > 1) {
+                      if (connectedProfiles.length > 0) {
                         return (
-                          <div className="relative group inline-block">
+                          <div className="relative group inline-block text-left">
                             <button
                               type="button"
                               disabled={publishMutation.isPending}
-                              className="font-mono text-[9px] uppercase tracking-widest bg-primary hover:bg-primary/90 text-primary-foreground px-3 py-1.5 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1"
+                              className="btn btn-youtube"
                             >
-                              {publishMutation.isPending ? "Subindo..." : "Subir YouTube ▾"}
+                              <svg viewBox="0 0 24 24" className="size-3 fill-current" aria-hidden="true"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                              {publishMutation.isPending ? "Subindo..." : "YouTube ▾"}
                             </button>
                             <div className="absolute right-0 bottom-full mb-1 w-48 bg-surface border border-border rounded-xl shadow-xl hidden group-hover:block hover:block z-50 overflow-hidden font-mono text-xs">
                               <div className="px-3 py-2 bg-background border-b border-border text-[9px] uppercase tracking-widest text-muted-foreground">Escolha o Canal:</div>
@@ -1494,24 +1769,66 @@ function Index() {
                         );
                       }
                       
-                      const defaultProfile = connectedProfiles[0];
-                      return (
-                        <button
-                          type="button"
-                          onClick={() => publishMutation.mutate({ jobId: job.id, profile: defaultProfile })}
-                          disabled={publishMutation.isPending}
-                          className="font-mono text-[9px] uppercase tracking-widest bg-primary hover:bg-primary/90 text-primary-foreground px-3 py-1.5 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                        >
-                          {publishMutation.isPending ? "Subindo..." : "Subir YouTube"}
-                        </button>
-                      );
+                      return null;
                     })()}
+
+                    {isJobReadyToPublish(job.status) && (() => {
+                      const activeTikTokProfile = selectedTikTokProfile
+                        ? tiktokProfiles.find(p => p.name === selectedTikTokProfile)
+                        : null;
+
+                      if (activeTikTokProfile) {
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => publishTiktokMutation.mutate({ jobId: job.id, profile: activeTikTokProfile })}
+                            disabled={publishTiktokMutation.isPending}
+                            className="btn btn-tiktok"
+                            style={{ animation: "ttGlow 2s ease-in-out infinite" }}
+                          >
+                            <svg viewBox="0 0 24 24" className="size-3 fill-current"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05A6.34 6.34 0 003.15 15.3a6.34 6.34 0 006.34 6.35 6.34 6.34 0 006.34-6.35V9.01a8.27 8.27 0 004.85 1.56V7.12a4.85 4.85 0 01-1.09-.43z"/></svg>
+                            {publishTiktokMutation.isPending ? "Subindo..." : activeTikTokProfile.name}
+                          </button>
+                        );
+                      }
+
+                      if (tiktokProfiles.length > 0) {
+                        return (
+                          <div className="relative group inline-block text-left">
+                            <button
+                              type="button"
+                              disabled={publishTiktokMutation.isPending}
+                              className="btn btn-tiktok"
+                            >
+                              <svg viewBox="0 0 24 24" className="size-3 fill-current"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05A6.34 6.34 0 003.15 15.3a6.34 6.34 0 006.34 6.35 6.34 6.34 0 006.34-6.35V9.01a8.27 8.27 0 004.85 1.56V7.12a4.85 4.85 0 01-1.09-.43z"/></svg>
+                              {publishTiktokMutation.isPending ? "Subindo..." : "TikTok ▾"}
+                            </button>
+                            <div className="absolute right-0 bottom-full mb-1 w-48 bg-surface border border-border rounded-xl shadow-xl hidden group-hover:block hover:block z-50 overflow-hidden font-mono text-xs">
+                              <div className="px-3 py-2 bg-background border-b border-border text-[9px] uppercase tracking-widest text-muted-foreground">Escolha o Perfil:</div>
+                              {tiktokProfiles.map((p) => (
+                                <button
+                                  key={p.name}
+                                  type="button"
+                                  onClick={() => publishTiktokMutation.mutate({ jobId: job.id, profile: p })}
+                                  className="w-full text-left px-3 py-2 hover:bg-primary hover:text-white transition-colors flex items-center justify-between cursor-pointer"
+                                >
+                                  <span>{p.name}</span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      }
+                      
+                      return null;
+                    })()}
+
                     {job.status === "failed" && (
                       <button
                         type="button"
                         onClick={() => retryMutation.mutate(job.id)}
                         disabled={retryMutation.isPending}
-                        className="font-mono text-[9px] uppercase tracking-widest bg-destructive hover:bg-destructive/90 text-destructive-foreground px-3 py-1.5 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                        className="btn btn-warning"
                       >
                         {retryMutation.isPending ? "Reiniciando..." : "Tentar Novamente"}
                       </button>
@@ -1524,7 +1841,7 @@ function Index() {
                         }
                       }}
                       disabled={deleteMutation.isPending}
-                      className="font-mono text-[9px] uppercase tracking-widest border border-border hover:border-destructive/40 hover:text-destructive hover:bg-destructive/10 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-40 cursor-pointer"
+                      className="btn btn-danger"
                     >
                       {deleteMutation.isPending ? "..." : "Excluir"}
                     </button>
