@@ -6,6 +6,8 @@ import { toast } from "sonner";
 import { analyzeTranscript, type ViralClip } from "@/lib/clips.functions";
 import { fetchTranscript } from "@/lib/transcript.functions";
 import { createRenderJob, listRenderJobs, clearOldRenderJobs, retryRenderJob, type RenderJob } from "@/lib/render-jobs.functions";
+import type { RenderJobClip } from "@/lib/render-jobs.types";
+
 import { ClipCard } from "@/components/ClipCard";
 import { Toaster } from "@/components/ui/sonner";
 import { getGoogleClientId, resolveOAuthRedirectUri } from "@/lib/youtube-auth.functions";
@@ -407,6 +409,27 @@ function Index() {
 
   const processingJob = activeJob || jobs.find((j) => j.status === "pending" || j.status === "published_requested");
   const historyJobs = jobs.filter((j) => !["in_progress", "pending", "published_requested"].includes(j.status));
+
+  // Extract all YouTube published clips from all jobs that have YouTube links
+  const youtubePublishedClips = jobs.flatMap((job) => {
+    const outputPath = job.output_path || "";
+    const youtubeIdx = outputPath.indexOf("YouTube: ");
+    if (youtubeIdx === -1) return [];
+    const youtubeSection = outputPath.slice(youtubeIdx + "YouTube: ".length);
+    const links = youtubeSection.split(" | ").filter((l) => l.includes("youtube.com/watch"));
+    const clipItems = (job.clip_items as RenderJobClip[]) || [];
+    return links.map((url, i) => {
+      const videoIdMatch = url.match(/[?&]v=([^&]+)/);
+      return {
+        url: url.trim(),
+        videoId: videoIdMatch ? videoIdMatch[1] : "",
+        title: clipItems[i]?.title || `Clipe ${i + 1}`,
+        jobTitle: job.video_title || job.video_url,
+        publishedAt: job.completed_at || job.created_at,
+        jobId: job.id,
+      };
+    });
+  });
 
 
   return (
@@ -884,6 +907,72 @@ function Index() {
                       </>
                     );
                   })()}
+                </div>
+              </div>
+            )}
+
+            {/* YouTube Published Videos Gallery */}
+            {youtubePublishedClips.length > 0 && (
+              <div className="mt-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="size-7 rounded-lg flex items-center justify-center" style={{ background: "linear-gradient(135deg, #FF0000 0%, #cc0000 100%)" }}>
+                      <svg viewBox="0 0 24 24" className="size-4 fill-white" aria-hidden="true"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </div>
+                    <div>
+                      <h3 className="font-display text-lg tracking-tight">Publicados no YouTube</h3>
+                      <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">{youtubePublishedClips.length} clipe{youtubePublishedClips.length !== 1 ? "s" : ""} enviado{youtubePublishedClips.length !== 1 ? "s" : ""}</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {youtubePublishedClips.map((clip, idx) => (
+                    <a
+                      key={`${clip.jobId}-${idx}`}
+                      href={clip.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="group block rounded-2xl overflow-hidden border border-border/60 bg-background/50 hover:border-red-500/40 hover:bg-red-500/5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-red-500/10"
+                    >
+                      {/* Thumbnail */}
+                      <div className="relative aspect-video bg-surface overflow-hidden">
+                        {clip.videoId ? (
+                          <img
+                            src={`https://img.youtube.com/vi/${clip.videoId}/mqdefault.jpg`}
+                            alt={clip.title}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center bg-surface">
+                            <svg viewBox="0 0 24 24" className="size-10 opacity-20 fill-current"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                          </div>
+                        )}
+                        {/* Play overlay */}
+                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/30">
+                          <div className="size-12 rounded-full bg-red-600 flex items-center justify-center shadow-lg">
+                            <svg viewBox="0 0 24 24" className="size-5 fill-white ml-0.5"><path d="M8 5v14l11-7z"/></svg>
+                          </div>
+                        </div>
+                        {/* Index badge */}
+                        <div className="absolute top-2 left-2 bg-black/70 rounded-md px-1.5 py-0.5 font-mono text-[9px] text-white uppercase tracking-widest">
+                          Clipe {idx + 1}
+                        </div>
+                      </div>
+                      {/* Info */}
+                      <div className="p-3">
+                        <div className="font-semibold text-sm text-foreground line-clamp-2 group-hover:text-red-400 transition-colors leading-snug">
+                          {clip.title}
+                        </div>
+                        <div className="mt-1.5 flex items-center gap-1.5 text-[10px] text-muted-foreground font-mono">
+                          <span className="truncate max-w-[140px]">{clip.jobTitle}</span>
+                        </div>
+                        <div className="mt-1 text-[10px] text-muted-foreground font-mono">
+                          {new Date(clip.publishedAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                        </div>
+                      </div>
+                    </a>
+                  ))}
                 </div>
               </div>
             )}
