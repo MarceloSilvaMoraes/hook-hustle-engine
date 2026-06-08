@@ -142,3 +142,24 @@ export const retryRenderJob = createServerFn({ method: "POST" })
     }
   });
 
+export const deleteRenderJob = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) => z.object({ jobId: z.string().min(1) }).parse(data))
+  .handler(async ({ data }) => {
+    const { jobId } = data;
+    try {
+      const { error } = await admin
+        .from("render_jobs")
+        .delete()
+        .eq("id", jobId);
+
+      if (error) {
+        return { ok: false as const, error: "Falha ao excluir o job." };
+      }
+
+      return { ok: true as const, message: "Job excluído com sucesso." };
+    } catch (err) {
+      return { ok: false as const, error: err instanceof Error ? err.message : "Erro ao excluir o job." };
+    }
+  });
+
+

@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { analyzeTranscript, type ViralClip } from "@/lib/clips.functions";
 import { fetchTranscript } from "@/lib/transcript.functions";
-import { createRenderJob, listRenderJobs, clearOldRenderJobs, retryRenderJob, type RenderJob } from "@/lib/render-jobs.functions";
+import { createRenderJob, listRenderJobs, clearOldRenderJobs, retryRenderJob, deleteRenderJob, type RenderJob } from "@/lib/render-jobs.functions";
 import type { RenderJobClip } from "@/lib/render-jobs.types";
 
 import { ClipCard } from "@/components/ClipCard";
@@ -238,6 +238,23 @@ function Index() {
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  const delJob = useServerFn(deleteRenderJob);
+  const deleteMutation = useMutation({
+    mutationFn: async (jobId: string) => {
+      const result = await delJob({ data: { jobId } });
+      if (!result.ok) {
+        throw new Error(result.error || "Falha ao excluir o job.");
+      }
+      return result;
+    },
+    onSuccess: (result) => {
+      toast.success(result.message);
+      void fetchJobs();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -868,11 +885,36 @@ function Index() {
                       ID: {processingJob.id} · {processingJob.platform} · {processingJob.render_format}
                     </p>
                   </div>
-                  <div className="text-left md:text-right">
+                  <div className="flex flex-wrap items-center gap-2 text-left md:text-right">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm("Deseja realmente reiniciar este job?")) {
+                          retryMutation.mutate(processingJob.id);
+                        }
+                      }}
+                      disabled={retryMutation.isPending}
+                      className="font-mono text-[9px] uppercase tracking-widest border border-amber-500/40 text-amber-500 hover:bg-amber-500/10 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                    >
+                      {retryMutation.isPending ? "Reiniciando..." : "Reiniciar"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm("Deseja realmente excluir este job ativo?")) {
+                          deleteMutation.mutate(processingJob.id);
+                        }
+                      }}
+                      disabled={deleteMutation.isPending}
+                      className="font-mono text-[9px] uppercase tracking-widest border border-destructive/40 text-destructive hover:bg-destructive/10 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                    >
+                      {deleteMutation.isPending ? "Excluindo..." : "Excluir"}
+                    </button>
                     <span className="inline-flex rounded-full bg-primary/10 px-3.5 py-1 text-xs font-semibold uppercase tracking-wider text-primary border border-primary/20">
                       {processingJob.status.replace("_", " ")}
                     </span>
                   </div>
+
                 </div>
                 <div className="mt-6">
                   {(() => {
@@ -1053,7 +1095,20 @@ function Index() {
                         {retryMutation.isPending ? "Reiniciando..." : "Tentar Novamente"}
                       </button>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm("Deseja realmente excluir este job?")) {
+                          deleteMutation.mutate(job.id);
+                        }
+                      }}
+                      disabled={deleteMutation.isPending}
+                      className="font-mono text-[9px] uppercase tracking-widest border border-border hover:border-destructive/40 hover:text-destructive hover:bg-destructive/10 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-40 cursor-pointer"
+                    >
+                      {deleteMutation.isPending ? "..." : "Excluir"}
+                    </button>
                   </div>
+
                 </div>
               ))}
               {historyJobs.length === 0 && (
