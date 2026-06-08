@@ -357,5 +357,21 @@ def run_worker() -> None:
             time.sleep(POLL_SECONDS)
 
 
+def ensure_single_instance(port: int = 59888) -> None:
+    """Ensure that only one instance of the worker is running on this machine."""
+    import socket
+    global _lock_socket
+    try:
+        _lock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # Bind to localhost to hold the lock without exposing external port
+        _lock_socket.bind(("127.0.0.1", port))
+    except socket.error:
+        print(f"\n[ERRO] Outra instancia do worker.py ja esta rodando nesta maquina.")
+        print("Use PARAR_TRABALHO.bat se quiser parar o worker ativo antes de iniciar outro.\n")
+        sys.exit(0)
+
+
 if __name__ == "__main__":
+    ensure_single_instance()
     run_worker()
+
