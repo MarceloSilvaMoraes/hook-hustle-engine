@@ -700,12 +700,12 @@ function Index() {
                   value={newProfileName}
                   onChange={(e) => setNewProfileName(e.target.value)}
                   placeholder="Nome do Canal (ex: Canal de Futebol)"
-                  className="flex-1 bg-surface border border-border rounded-lg px-3 py-2 text-xs font-mono outline-none focus:border-primary"
+                  className="flex-1 bg-background border border-border hover:border-primary/50 focus:border-primary focus:ring-1 focus:ring-primary/30 rounded-xl px-4 py-2.5 text-xs font-mono outline-none transition-all placeholder:text-muted-foreground/40"
                 />
                 <button
                   type="button"
                   onClick={handleAddProfile}
-                  className="bg-primary hover:bg-primary/90 text-primary-foreground font-mono text-[10px] uppercase tracking-widest px-4 py-2 rounded-lg transition-colors cursor-pointer"
+                  className="bg-primary hover:bg-primary/95 text-primary-foreground font-mono text-[10px] uppercase tracking-widest px-5 py-2.5 rounded-xl transition-all active:scale-[0.98] shadow-[0_4px_12px_rgba(120,119,198,0.3)] hover:shadow-[0_6px_18px_rgba(120,119,198,0.45)] cursor-pointer"
                 >
                   Adicionar
                 </button>
@@ -716,11 +716,11 @@ function Index() {
                 {youtubeProfiles.map((profile) => {
                   const isEditing = editingProfileName === profile.name;
                   return (
-                    <div key={profile.name} className="p-3.5 rounded-xl border border-border/80 bg-background/40 hover:bg-background/80 transition-colors">
+                    <div key={profile.name} className="p-4 rounded-2xl border border-border bg-background/30 hover:bg-background/50 transition-colors shadow-inner">
                       <div className="flex items-center justify-between gap-3 flex-wrap">
                         <div className="min-w-0">
                           <div className="font-semibold text-xs text-foreground flex items-center gap-2">
-                            <span className="size-2 rounded-full" style={{ backgroundColor: profile.refreshToken ? "#10b981" : "#ef4444" }} />
+                            <span className="size-2 rounded-full animate-pulse" style={{ backgroundColor: profile.refreshToken ? "#10b981" : "#ef4444" }} />
                             {profile.name}
                           </div>
                           <div className="text-[10px] text-muted-foreground font-mono mt-1">
@@ -734,7 +734,11 @@ function Index() {
                           <button
                             type="button"
                             onClick={() => handleConnectProfile(profile.name)}
-                            className="font-mono text-[9px] uppercase tracking-widest bg-white text-slate-900 hover:bg-slate-100 px-3 py-1.5 rounded-lg transition-colors cursor-pointer border border-border"
+                            className={`font-mono text-[9px] uppercase tracking-widest px-3.5 py-2 rounded-xl transition-all cursor-pointer ${
+                              profile.refreshToken
+                                ? "bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 hover:bg-emerald-500/20"
+                                : "bg-red-600 hover:bg-red-700 text-white shadow-[0_4px_12px_rgba(220,38,38,0.25)] hover:shadow-[0_6px_16px_rgba(220,38,38,0.4)]"
+                            }`}
                           >
                             {profile.refreshToken ? "Reconectar" : "Conectar Google"}
                           </button>
@@ -747,14 +751,14 @@ function Index() {
                                 handleStartEditProfile(profile);
                               }
                             }}
-                            className="font-mono text-[9px] uppercase tracking-widest border border-primary/40 text-primary hover:bg-primary/10 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                            className="font-mono text-[9px] uppercase tracking-widest bg-primary text-primary-foreground hover:bg-primary/95 px-3.5 py-2 rounded-xl transition-all shadow-[0_4px_12px_rgba(120,119,198,0.25)] hover:shadow-[0_6px_16px_rgba(120,119,198,0.4)] cursor-pointer"
                           >
                             {isEditing ? "Salvar" : "Configurar"}
                           </button>
                           <button
                             type="button"
                             onClick={() => handleRemoveProfile(profile.name)}
-                            className="font-mono text-[9px] uppercase tracking-widest border border-destructive/40 text-destructive hover:bg-destructive/10 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                            className="font-mono text-[9px] uppercase tracking-widest border border-destructive/25 text-destructive hover:bg-destructive/10 px-3.5 py-2 rounded-xl transition-all cursor-pointer"
                           >
                             Remover
                           </button>
@@ -763,7 +767,7 @@ function Index() {
 
                       {/* Edit Profile Configuration Details */}
                       {isEditing && (
-                        <div className="mt-4 pt-3 border-t border-border/60 grid gap-3 grid-cols-1 sm:grid-cols-3 text-xs">
+                        <div className="mt-4 pt-4 border-t border-border/60 grid gap-3 grid-cols-1 sm:grid-cols-3 text-xs">
                           <div>
                             <label className="font-mono text-[10px] text-muted-foreground uppercase block mb-1">Hashtags Padrão</label>
                             <input
@@ -771,7 +775,7 @@ function Index() {
                               value={editingHashtags}
                               onChange={(e) => setEditingHashtags(e.target.value)}
                               placeholder="#shorts,#viral,#meucanal"
-                              className="w-full bg-surface border border-border rounded-lg px-2.5 py-1.5 font-mono text-[11px] outline-none focus:border-primary"
+                              className="w-full bg-background border border-border hover:border-primary/50 focus:border-primary focus:ring-1 focus:ring-primary/30 rounded-xl px-3 py-2 font-mono text-[11px] outline-none transition-all"
                             />
                           </div>
                           <div>
@@ -781,7 +785,7 @@ function Index() {
                               value={editingTags}
                               onChange={(e) => setEditingTags(e.target.value)}
                               placeholder="tag1,tag2,tag3"
-                              className="w-full bg-surface border border-border rounded-lg px-2.5 py-1.5 font-mono text-[11px] outline-none focus:border-primary"
+                              className="w-full bg-background border border-border hover:border-primary/50 focus:border-primary focus:ring-1 focus:ring-primary/30 rounded-xl px-3 py-2 font-mono text-[11px] outline-none transition-all"
                             />
                           </div>
                           <div>
@@ -789,7 +793,7 @@ function Index() {
                             <select
                               value={editingPrivacy}
                               onChange={(e) => setEditingPrivacy(e.target.value as any)}
-                              className="w-full bg-surface border border-border rounded-lg px-2 py-1.5 font-mono text-[11px] outline-none focus:border-primary"
+                              className="w-full bg-background border border-border hover:border-primary/50 focus:border-primary focus:ring-1 focus:ring-primary/30 rounded-xl px-3 py-2 font-mono text-[11px] outline-none transition-all cursor-pointer"
                             >
                               <option value="private">Privado (Private)</option>
                               <option value="public">Público (Public)</option>
