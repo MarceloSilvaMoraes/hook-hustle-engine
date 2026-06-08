@@ -125,8 +125,27 @@ declare global {
   }
 }
 
+function extractYoutubeLinks(outputPath: string | null): string[] {
+  if (!outputPath) return [];
+  const lower = outputPath.toLowerCase();
+  const marker = "youtube:";
+  const idx = lower.indexOf(marker);
+  if (idx === -1) {
+    return outputPath
+      .split(" | ")
+      .map((s) => s.trim())
+      .filter((s) => s.includes("youtube.com/watch") || s.includes("youtu.be/"));
+  }
+  const section = outputPath.slice(idx + marker.length);
+  return section
+    .split(" | ")
+    .map((s) => s.trim())
+    .filter((s) => s.includes("youtube.com/watch") || s.includes("youtu.be/"));
+}
+
 function Index() {
   const [transcript, setTranscript] = useState("");
+
   const [videoTitle, setVideoTitle] = useState("");
   const [platform, setPlatform] = useState("TikTok/Reels (9:16)");
   const [tone, setTone] = useState("Alta Energia");
@@ -429,16 +448,12 @@ function Index() {
 
   // Extract all YouTube published clips from all jobs that have YouTube links
   const youtubePublishedClips = jobs.flatMap((job) => {
-    const outputPath = job.output_path || "";
-    const youtubeIdx = outputPath.indexOf("YouTube: ");
-    if (youtubeIdx === -1) return [];
-    const youtubeSection = outputPath.slice(youtubeIdx + "YouTube: ".length);
-    const links = youtubeSection.split(" | ").filter((l) => l.includes("youtube.com/watch"));
+    const links = extractYoutubeLinks(job.output_path);
     const clipItems = (job.clip_items as RenderJobClip[]) || [];
     return links.map((url, i) => {
       const videoIdMatch = url.match(/[?&]v=([^&]+)/);
       return {
-        url: url.trim(),
+        url,
         videoId: videoIdMatch ? videoIdMatch[1] : "",
         title: clipItems[i]?.title || `Clipe ${i + 1}`,
         jobTitle: job.video_title || job.video_url,
@@ -1022,21 +1037,41 @@ function Index() {
             {/* Compact History List */}
             <div className="mt-6 flex flex-col gap-3">
               <h3 className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-1">Histórico de Jobs</h3>
-              {historyJobs.map((job) => (
-                <div key={job.id} className="p-4 rounded-2xl border border-border/60 bg-background/50 hover:bg-background/80 hover:border-border transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 text-sm">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
-                        Job {job.id.slice(0, 8)}
-                      </span>
-                      <span className="text-[9px] text-muted-foreground font-mono">
-                        {new Date(job.created_at).toLocaleString("pt-BR")}
-                      </span>
-                    </div>
-                    <div className="mt-1 font-semibold text-foreground truncate">{job.video_title || job.video_url}</div>
-                    <div className="text-xs text-muted-foreground mt-0.5 font-mono">
-                      {job.platform} · {job.render_format} · Out: <span className="text-foreground/80 break-all">{job.output_path || "N/A"}</span>
-                    </div>
+              {historyJobs.map((job) => {
+                const jobYoutubeLinks = extractYoutubeLinks(job.output_path);
+                return (
+                  <div key={job.id} className="p-4 rounded-2xl border border-border/60 bg-background/50 hover:bg-background/80 hover:border-border transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 text-sm">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
+                          Job {job.id.slice(0, 8)}
+                        </span>
+                        <span className="text-[9px] text-muted-foreground font-mono">
+                          {new Date(job.created_at).toLocaleString("pt-BR")}
+                        </span>
+                      </div>
+                      <div className="mt-1 font-semibold text-foreground truncate">{job.video_title || job.video_url}</div>
+                      <div className="text-xs text-muted-foreground mt-0.5 font-mono">
+                        {job.platform} · {job.render_format} · Out: <span className="text-foreground/80 break-all">{job.output_path || "N/A"}</span>
+                      </div>
+                      {jobYoutubeLinks.length > 0 && (
+                        <div className="mt-2.5 flex flex-wrap gap-1.5 items-center">
+                          <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest mr-1">YouTube:</span>
+                          {jobYoutubeLinks.map((link, idx) => (
+                            <a
+                              key={idx}
+                              href={link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 text-[11px] font-mono text-red-400 font-semibold transition-colors cursor-pointer"
+                            >
+                              <svg viewBox="0 0 24 24" className="size-3 fill-current" aria-hidden="true"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                              Clipe {idx + 1}
+                            </a>
+                          ))}
+                        </div>
+                      )}
+
                     {job.error_message && (
                       <div className="mt-1.5 text-xs text-destructive/90 font-mono bg-destructive/5 border border-destructive/10 rounded px-2 py-1 flex items-start gap-1">
                         <span className="font-bold shrink-0">Erro:</span>
@@ -1108,9 +1143,9 @@ function Index() {
                       {deleteMutation.isPending ? "..." : "Excluir"}
                     </button>
                   </div>
-
                 </div>
-              ))}
+              );
+            })}
               {historyJobs.length === 0 && (
                 <div className="text-center py-6 text-xs text-muted-foreground font-mono uppercase tracking-widest border border-dashed border-border rounded-2xl">
                   Nenhum job finalizado no histórico
