@@ -1157,6 +1157,65 @@ function Index() {
               </div>
             </div>
 
+            {/* Quick Channel Switcher */}
+            {youtubeProfiles.length > 0 && (
+              <div className="mt-5 p-4 rounded-2xl border border-border/70 bg-background/40">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground shrink-0">
+                    Canal ativo:
+                  </span>
+                  {/* "Sem upload" pill */}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedProfile("")}
+                    className={`inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest px-3 py-1.5 rounded-full transition-all cursor-pointer ${
+                      selectedProfile === ""
+                        ? "bg-surface border border-primary text-primary shadow-[0_0_12px_-4px_rgba(120,119,198,0.6)]"
+                        : "border border-border text-muted-foreground hover:border-primary/40 hover:text-primary"
+                    }`}
+                  >
+                    <span className="size-1.5 rounded-full bg-current opacity-60" />
+                    Sem upload
+                  </button>
+                  {youtubeProfiles.map((profile) => {
+                    const isActive = selectedProfile === profile.name;
+                    const isConnected = Boolean(profile.refreshToken);
+                    return (
+                      <button
+                        key={profile.name}
+                        type="button"
+                        onClick={() => {
+                          if (!isConnected) {
+                            toast.error(`Canal "${profile.name}" não está autenticado. Conecte o Google primeiro.`);
+                            return;
+                          }
+                          setSelectedProfile(isActive ? "" : profile.name);
+                        }}
+                        title={!isConnected ? "Canal não autenticado — conecte o Google primeiro" : `Enviar para ${profile.name}`}
+                        className={`inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest px-3 py-1.5 rounded-full transition-all cursor-pointer ${
+                          isActive
+                            ? "bg-primary text-primary-foreground shadow-[0_4px_16px_-4px_rgba(120,119,198,0.7)]"
+                            : isConnected
+                            ? "border border-border text-muted-foreground hover:border-primary/50 hover:text-primary hover:bg-primary/5"
+                            : "border border-border/40 text-muted-foreground/40 cursor-not-allowed"
+                        }`}
+                      >
+                        <span className={`size-1.5 rounded-full ${isConnected ? (isActive ? "bg-white" : "bg-emerald-400") : "bg-destructive/60"}`} />
+                        {profile.name}
+                        {!isConnected && <span className="text-[8px] opacity-60 ml-0.5">✕</span>}
+                      </button>
+                    );
+                  })}
+                  {selectedProfile && (
+                    <span className="ml-auto text-[10px] font-mono text-primary flex items-center gap-1">
+                      <svg viewBox="0 0 24 24" className="size-3 fill-current" aria-hidden="true"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                      Próximo job → {selectedProfile}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Active Job Card */}
             {processingJob && (
               <div className="mt-6 rounded-3xl border border-primary/30 bg-primary/5 p-6 shadow-[0_8px_32px_0_rgba(120,119,198,0.08)] backdrop-blur-sm relative overflow-hidden">
@@ -1389,6 +1448,25 @@ function Index() {
                     </span>
                     {isJobReadyToPublish(job.status) && (() => {
                       const connectedProfiles = youtubeProfiles.filter(p => p.refreshToken);
+                      // If there's an active selected profile from the Quick Channel Switcher, use it directly
+                      const activeProfile = selectedProfile
+                        ? connectedProfiles.find(p => p.name === selectedProfile)
+                        : null;
+
+                      if (activeProfile) {
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => publishMutation.mutate({ jobId: job.id, profile: activeProfile })}
+                            disabled={publishMutation.isPending}
+                            className="font-mono text-[9px] uppercase tracking-widest bg-primary hover:bg-primary/90 text-primary-foreground px-3 py-1.5 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1.5"
+                          >
+                            <svg viewBox="0 0 24 24" className="size-2.5 fill-current" aria-hidden="true"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                            {publishMutation.isPending ? "Subindo..." : `→ ${activeProfile.name}`}
+                          </button>
+                        );
+                      }
+
                       if (connectedProfiles.length > 1) {
                         return (
                           <div className="relative group inline-block">
