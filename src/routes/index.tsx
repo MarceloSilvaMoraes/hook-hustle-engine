@@ -143,6 +143,15 @@ function extractYoutubeLinks(outputPath: string | null): string[] {
     .filter((s) => s.includes("youtube.com/watch") || s.includes("youtu.be/"));
 }
 
+interface YoutubeProfile {
+  name: string;
+  refreshToken: string;
+  connectedAt: string;
+  defaultHashtags?: string;
+  defaultTags?: string;
+  privacyStatus?: "public" | "private" | "unlisted";
+}
+
 function Index() {
   const [transcript, setTranscript] = useState("");
 
@@ -158,6 +167,15 @@ function Index() {
   const [oauthStatus, setOauthStatus] = useState("Aguardando login do Google...");
   const [youtubeRefreshToken, setYoutubeRefreshToken] = useState("");
   const [playing, setPlaying] = useState<{ start: number; end: number; title: string } | null>(null);
+
+  const [youtubeProfiles, setYoutubeProfiles] = useState<YoutubeProfile[]>([]);
+  const [selectedProfile, setSelectedProfile] = useState<string>("");
+  const [newProfileName, setNewProfileName] = useState<string>("");
+  const [editingProfileName, setEditingProfileName] = useState<string | null>(null);
+  const [editingHashtags, setEditingHashtags] = useState<string>("");
+  const [editingTags, setEditingTags] = useState<string>("");
+  const [editingPrivacy, setEditingPrivacy] = useState<"public" | "private" | "unlisted">("private");
+
 
   const analyze = useServerFn(analyzeTranscript);
   const exchange = useServerFn(exchangeYoutubeCode);
@@ -203,6 +221,20 @@ function Index() {
         throw new Error("É necessário um link de vídeo para criar um job local.");
       }
 
+      let jobInstructions = `Renderize localmente em ${renderFormat} a partir do vídeo ${sourceUrl.trim()}`;
+      if (selectedProfile) {
+        const profile = youtubeProfiles.find(p => p.name === selectedProfile);
+        if (profile && profile.refreshToken) {
+          jobInstructions = JSON.stringify({
+            youtube_refresh_token: profile.refreshToken,
+            privacy_status: profile.privacyStatus || "private",
+            default_hashtags: profile.defaultHashtags || "",
+            default_tags: profile.defaultTags || "",
+            target_profile_name: profile.name,
+          });
+        }
+      }
+
       const result = await createJob({
         data: {
           videoUrl: sourceUrl.trim(),
@@ -210,7 +242,7 @@ function Index() {
           platform,
           renderFormat,
           clipItems: clips,
-          instructions: `Renderize localmente em ${renderFormat} a partir do vídeo ${sourceUrl.trim()}`,
+          instructions: jobInstructions,
         },
       });
 
@@ -228,8 +260,17 @@ function Index() {
   });
 
   const publishMutation = useMutation({
-    mutationFn: async (jobId: string) => {
-      const result = await publish({ data: { jobId } });
+    mutationFn: async ({ jobId, profile }: { jobId: string; profile?: YoutubeProfile }) => {
+      let youtubeConfig;
+      if (profile && profile.refreshToken) {
+        youtubeConfig = {
+          youtube_refresh_token: profile.refreshToken,
+          privacy_status: profile.privacyStatus || "private",
+          default_hashtags: profile.defaultHashtags || "",
+          default_tags: profile.defaultTags || "",
+        };
+      }
+      const result = await publish({ data: { jobId, youtubeConfig } });
       if (!result.ok) {
         throw new Error(result.error || "Falha ao publicar no YouTube.");
       }
@@ -313,6 +354,24 @@ function Index() {
       } else {
         setYoutubeRefreshToken("");
         setOauthStatus("Aguardando login do Google...");
+      }
+
+      const savedProfiles = window.localStorage.getItem("hook_hustle_youtube_profiles") || "";
+      if (savedProfiles) {
+        try {
+          const parsed = JSON.parse(savedProfiles);
+          if (Array.isArray(parsed)) {
+            setYoutubeProfiles(parsed);
+          }
+        } catch {}
+      } else {
+        const initial = [
+          { name: "Humor", refreshToken: "", connectedAt: "", defaultHashtags: "#humor,#comedia,#shorts", defaultTags: "humor,comedia,engraçado", privacyStatus: "private" as const },
+          { name: "Futebol", refreshToken: "", connectedAt: "", defaultHashtags: "#futebol,#gols,#shorts", defaultTags: "futebol,gols,esporte", privacyStatus: "private" as const },
+          { name: "Tecnologia", refreshToken: "", connectedAt: "", defaultHashtags: "#tecnologia,#curiosidades,#shorts", defaultTags: "tecnologia,curiosidades,atualidades", privacyStatus: "private" as const }
+        ];
+        window.localStorage.setItem("hook_hustle_youtube_profiles", JSON.stringify(initial));
+        setYoutubeProfiles(initial);
       }
     };
 
@@ -410,6 +469,107 @@ function Index() {
 
     codeClient.requestCode();
   };
+
+  const handleConnectProfile = (profileName: string) => {
+    const clientId = getGoogleClientId();
+    const effectiveRedirectUri = resolveOAuthRedirectUri(typeof window !== "undefined" ? window.location.origin : undefined);
+
+    if (!clientId) {
+      toast.error("Configure VITE_GOOGLE_CLIENT_ID no ambiente para abrir o login do Google.");
+      return;
+    }
+
+    if (!effectiveRedirectUri) {
+      toast.error("Não foi possível determinar a URI de redirecionamento. Recarregue a página.");
+      return;
+    }
+
+    if (!gsiReady || !window.google?.accounts?.oauth2?.initCodeClient) {
+      toast.error("Aguarde o carregamento do Google Sign-In e tente novamente.");
+      return;
+    }
+
+    window.localStorage.setItem("pending_channel_profile_name", profileName);
+    toast.success("Redirecionando para o Google...");
+
+    const codeClient = window.google.accounts.oauth2.initCodeClient({
+      client_id: clientId,
+      scope: "openid email profile https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.force-ssl",
+      ux_mode: "redirect",
+      redirect_uri: effectiveRedirectUri,
+      prompt: "consent select_account",
+      access_type: "offline",
+      include_granted_scopes: true,
+    });
+
+    codeClient.requestCode();
+  };
+
+  const handleAddProfile = () => {
+    if (!newProfileName.trim()) {
+      toast.error("Insira o nome do canal.");
+      return;
+    }
+    const name = newProfileName.trim();
+    if (youtubeProfiles.some(p => p.name.toLowerCase() === name.toLowerCase())) {
+      toast.error("Já existe um canal com este nome.");
+      return;
+    }
+
+    const updated = [
+      ...youtubeProfiles,
+      {
+        name,
+        refreshToken: "",
+        connectedAt: "",
+        defaultHashtags: "#shorts,#viral",
+        defaultTags: "cortes,shorts",
+        privacyStatus: "private" as const
+      }
+    ];
+    setYoutubeProfiles(updated);
+    window.localStorage.setItem("hook_hustle_youtube_profiles", JSON.stringify(updated));
+    setNewProfileName("");
+    toast.success(`Canal "${name}" adicionado. Agora conecte sua conta do Google.`);
+  };
+
+  const handleRemoveProfile = (profileName: string) => {
+    if (confirm(`Deseja realmente remover o canal "${profileName}"?`)) {
+      const updated = youtubeProfiles.filter(p => p.name !== profileName);
+      setYoutubeProfiles(updated);
+      window.localStorage.setItem("hook_hustle_youtube_profiles", JSON.stringify(updated));
+      if (selectedProfile === profileName) {
+        setSelectedProfile("");
+      }
+      toast.success(`Canal "${profileName}" removido.`);
+    }
+  };
+
+  const handleSaveProfileSettings = (profileName: string) => {
+    const updated = youtubeProfiles.map(p => {
+      if (p.name === profileName) {
+        return {
+          ...p,
+          defaultHashtags: editingHashtags,
+          defaultTags: editingTags,
+          privacyStatus: editingPrivacy,
+        };
+      }
+      return p;
+    });
+    setYoutubeProfiles(updated);
+    window.localStorage.setItem("hook_hustle_youtube_profiles", JSON.stringify(updated));
+    setEditingProfileName(null);
+    toast.success("Configurações do canal salvas!");
+  };
+
+  const handleStartEditProfile = (profile: YoutubeProfile) => {
+    setEditingProfileName(profile.name);
+    setEditingHashtags(profile.defaultHashtags || "");
+    setEditingTags(profile.defaultTags || "");
+    setEditingPrivacy(profile.privacyStatus || "private");
+  };
+
 
 
   const getJobStatusLabel = (status: RenderJob["status"]) => {
@@ -523,38 +683,129 @@ function Index() {
                 {fetchMutation.isPending ? "Buscando..." : "Importar"}
               </button>
             </div>
-            <div className="mb-4 rounded-xl border border-primary/20 bg-primary/5 p-4">
-              <div className="flex flex-wrap items-center gap-3">
+            {/* Multi-Channel Profiles Manager */}
+            <div className="mb-6 rounded-2xl border border-primary/20 bg-primary/5 p-5">
+              <h3 className="font-display text-lg uppercase tracking-tight text-primary flex items-center gap-2 mb-2">
+                <svg viewBox="0 0 24 24" className="size-4 fill-current"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                Canais do YouTube (Multi-Perfil)
+              </h3>
+              <p className="text-xs text-muted-foreground mb-4">
+                Conecte múltiplos canais do YouTube (ex: Humor, Futebol, Tecnologia) e escolha para onde enviar cada clipe de forma rápida.
+              </p>
+
+              {/* Add Profile Form */}
+              <div className="flex gap-2 mb-4">
+                <input
+                  type="text"
+                  value={newProfileName}
+                  onChange={(e) => setNewProfileName(e.target.value)}
+                  placeholder="Nome do Canal (ex: Canal de Futebol)"
+                  className="flex-1 bg-surface border border-border rounded-lg px-3 py-2 text-xs font-mono outline-none focus:border-primary"
+                />
                 <button
                   type="button"
-                  onClick={handleConnectYoutube}
-                  className="inline-flex items-center gap-2 rounded-xl border border-border bg-white text-slate-900 px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.18em] shadow-sm transition-all hover:-translate-y-0.5 hover:bg-slate-100"
+                  onClick={handleAddProfile}
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground font-mono text-[10px] uppercase tracking-widest px-4 py-2 rounded-lg transition-colors cursor-pointer"
                 >
-                  <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
-                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                    <path fill="#FBBC05" d="M5.84 13.94c-.22-.66-.35-1.36-.35-2.08s.13-1.42.35-2.08V6.94H2.18C1.43 8.31 1 9.88 1 11.5s.43 3.19 1.18 4.56l4.66-2.12z" />
-                    <path fill="#EA4335" d="M12 5.98c1.61 0 3.05.55 4.18 1.63l3.13-3.13C17.45 2.99 14.97 2 12 2 7.7 2 3.99 4.47 2.18 7.44l3.66 2.84C6.71 7.91 9.14 5.98 12 5.98z" />
-                  </svg>
-                  Continuar com Google
+                  Adicionar
                 </button>
-                <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground/80">
-                  Abre a tela de login do Google para escolher sua conta manualmente.
-                </p>
               </div>
-              <p className="mt-2 text-[10px] font-mono uppercase tracking-widest text-muted-foreground/70">
-                O login agora usa a tela nativa do Google para escolher a conta, sem precisar digitar Client ID manualmente.
-              </p>
-              <p className="mt-1 text-[10px] font-mono uppercase tracking-widest text-muted-foreground/70">
-                O login usa o Client ID real do Google Cloud Console. Confirme no console esta URI de redirecionamento:
-                {" "}
-                <span className="text-primary">{redirectUri || "Carregando URI de redirecionamento..."}</span>
-              </p>
-              <p className="mt-1 text-[10px] font-mono uppercase tracking-widest text-muted-foreground/70">
-                Se o login falhar, verifique também o GOOGLE_CLIENT_SECRET no servidor do OAuth.
-              </p>
-              <p className="mt-2 text-[10px] font-mono uppercase tracking-widest text-primary/80">
-                {oauthStatus}
+
+              {/* Profiles List */}
+              <div className="space-y-3">
+                {youtubeProfiles.map((profile) => {
+                  const isEditing = editingProfileName === profile.name;
+                  return (
+                    <div key={profile.name} className="p-3.5 rounded-xl border border-border/80 bg-background/40 hover:bg-background/80 transition-colors">
+                      <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <div className="min-w-0">
+                          <div className="font-semibold text-xs text-foreground flex items-center gap-2">
+                            <span className="size-2 rounded-full" style={{ backgroundColor: profile.refreshToken ? "#10b981" : "#ef4444" }} />
+                            {profile.name}
+                          </div>
+                          <div className="text-[10px] text-muted-foreground font-mono mt-1">
+                            {profile.refreshToken 
+                              ? `Conectado em ${new Date(profile.connectedAt).toLocaleDateString("pt-BR")} · Status: ${profile.privacyStatus || "private"}`
+                              : "Não autenticado com o Google"
+                            }
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() => handleConnectProfile(profile.name)}
+                            className="font-mono text-[9px] uppercase tracking-widest bg-white text-slate-900 hover:bg-slate-100 px-3 py-1.5 rounded-lg transition-colors cursor-pointer border border-border"
+                          >
+                            {profile.refreshToken ? "Reconectar" : "Conectar Google"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (isEditing) {
+                                handleSaveProfileSettings(profile.name);
+                              } else {
+                                handleStartEditProfile(profile);
+                              }
+                            }}
+                            className="font-mono text-[9px] uppercase tracking-widest border border-primary/40 text-primary hover:bg-primary/10 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                          >
+                            {isEditing ? "Salvar" : "Configurar"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveProfile(profile.name)}
+                            className="font-mono text-[9px] uppercase tracking-widest border border-destructive/40 text-destructive hover:bg-destructive/10 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                          >
+                            Remover
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Edit Profile Configuration Details */}
+                      {isEditing && (
+                        <div className="mt-4 pt-3 border-t border-border/60 grid gap-3 grid-cols-1 sm:grid-cols-3 text-xs">
+                          <div>
+                            <label className="font-mono text-[10px] text-muted-foreground uppercase block mb-1">Hashtags Padrão</label>
+                            <input
+                              type="text"
+                              value={editingHashtags}
+                              onChange={(e) => setEditingHashtags(e.target.value)}
+                              placeholder="#shorts,#viral,#meucanal"
+                              className="w-full bg-surface border border-border rounded-lg px-2.5 py-1.5 font-mono text-[11px] outline-none focus:border-primary"
+                            />
+                          </div>
+                          <div>
+                            <label className="font-mono text-[10px] text-muted-foreground uppercase block mb-1">Tags Padrão</label>
+                            <input
+                              type="text"
+                              value={editingTags}
+                              onChange={(e) => setEditingTags(e.target.value)}
+                              placeholder="tag1,tag2,tag3"
+                              className="w-full bg-surface border border-border rounded-lg px-2.5 py-1.5 font-mono text-[11px] outline-none focus:border-primary"
+                            />
+                          </div>
+                          <div>
+                            <label className="font-mono text-[10px] text-muted-foreground uppercase block mb-1">Privacidade</label>
+                            <select
+                              value={editingPrivacy}
+                              onChange={(e) => setEditingPrivacy(e.target.value as any)}
+                              className="w-full bg-surface border border-border rounded-lg px-2 py-1.5 font-mono text-[11px] outline-none focus:border-primary"
+                            >
+                              <option value="private">Privado (Private)</option>
+                              <option value="public">Público (Public)</option>
+                              <option value="unlisted">Não Listado (Unlisted)</option>
+                            </select>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Status Hint */}
+              <p className="mt-4 text-[10px] font-mono uppercase tracking-widest text-muted-foreground/60">
+                Redirecionamento autorizado: <span className="text-primary">{redirectUri || "Carregando..."}</span>
               </p>
             </div>
             <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground/60 mb-4">
@@ -704,6 +955,28 @@ function Index() {
                     <div className="mt-2 font-semibold">{youtubeAuthLabel}</div>
                     <div className="mt-1 text-sm text-muted-foreground">{youtubeAuthHint}</div>
                   </div>
+                </div>
+                <div className="mt-4 pt-4 border-t border-border flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <span className="font-display text-xs uppercase tracking-widest text-muted-foreground block mb-1">
+                      Canal de Destino (YouTube)
+                    </span>
+                    <p className="text-xs text-muted-foreground">
+                      Os clipes serão renderizados localmente e enviados automaticamente para o canal selecionado.
+                    </p>
+                  </div>
+                  <select
+                    value={selectedProfile}
+                    onChange={(e) => setSelectedProfile(e.target.value)}
+                    className="bg-background border border-border rounded-xl px-4 py-2.5 font-mono text-xs text-foreground min-w-[240px] outline-none focus:border-primary cursor-pointer"
+                  >
+                    <option value="">Apenas local (Sem upload automático)</option>
+                    {youtubeProfiles.filter(p => p.refreshToken).map((p) => (
+                      <option key={p.name} value={p.name}>
+                        📺 {p.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 {youtubeRefreshToken && (
                   <div className="mt-4 rounded-2xl border border-primary/30 bg-primary/5 p-4">
@@ -1110,16 +1383,47 @@ function Index() {
                     >
                       {getJobStatusLabel(job.status)}
                     </span>
-                    {isJobReadyToPublish(job.status) && (
-                      <button
-                        type="button"
-                        onClick={() => publishMutation.mutate(job.id)}
-                        disabled={publishMutation.isPending}
-                        className="font-mono text-[9px] uppercase tracking-widest bg-primary hover:bg-primary/90 text-primary-foreground px-3 py-1.5 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                      >
-                        {publishMutation.isPending ? "Subindo..." : "Subir YouTube"}
-                      </button>
-                    )}
+                    {isJobReadyToPublish(job.status) && (() => {
+                      const connectedProfiles = youtubeProfiles.filter(p => p.refreshToken);
+                      if (connectedProfiles.length > 1) {
+                        return (
+                          <div className="relative group inline-block">
+                            <button
+                              type="button"
+                              disabled={publishMutation.isPending}
+                              className="font-mono text-[9px] uppercase tracking-widest bg-primary hover:bg-primary/90 text-primary-foreground px-3 py-1.5 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1"
+                            >
+                              {publishMutation.isPending ? "Subindo..." : "Subir YouTube ▾"}
+                            </button>
+                            <div className="absolute right-0 bottom-full mb-1 w-48 bg-surface border border-border rounded-xl shadow-xl hidden group-hover:block hover:block z-50 overflow-hidden font-mono text-xs">
+                              <div className="px-3 py-2 bg-background border-b border-border text-[9px] uppercase tracking-widest text-muted-foreground">Escolha o Canal:</div>
+                              {connectedProfiles.map((p) => (
+                                <button
+                                  key={p.name}
+                                  type="button"
+                                  onClick={() => publishMutation.mutate({ jobId: job.id, profile: p })}
+                                  className="w-full text-left px-3 py-2 hover:bg-primary hover:text-white transition-colors flex items-center justify-between cursor-pointer"
+                                >
+                                  <span>{p.name}</span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      }
+                      
+                      const defaultProfile = connectedProfiles[0];
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => publishMutation.mutate({ jobId: job.id, profile: defaultProfile })}
+                          disabled={publishMutation.isPending}
+                          className="font-mono text-[9px] uppercase tracking-widest bg-primary hover:bg-primary/90 text-primary-foreground px-3 py-1.5 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                        >
+                          {publishMutation.isPending ? "Subindo..." : "Subir YouTube"}
+                        </button>
+                      );
+                    })()}
                     {job.status === "failed" && (
                       <button
                         type="button"

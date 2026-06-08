@@ -88,23 +88,25 @@ def update_job(job_id: str, updates: dict) -> None:
     response.raise_for_status()
 
 
-def get_missing_youtube_config() -> list[str]:
+def get_missing_youtube_config(custom_refresh_token: str | None = None) -> list[str]:
     missing: list[str] = []
-    if not YOUTUBE_AUTO_PUBLISH:
+    if not YOUTUBE_AUTO_PUBLISH and not custom_refresh_token:
         missing.append("YOUTUBE_AUTO_PUBLISH=true")
     if not YOUTUBE_CLIENT_ID:
         missing.append("YOUTUBE_CLIENT_ID")
     if not YOUTUBE_CLIENT_SECRET:
         missing.append("YOUTUBE_CLIENT_SECRET")
-    if not YOUTUBE_REFRESH_TOKEN:
+    if not YOUTUBE_REFRESH_TOKEN and not custom_refresh_token:
         missing.append("YOUTUBE_REFRESH_TOKEN")
     return missing
 
 
-def get_youtube_service():
-    if not YOUTUBE_AUTO_PUBLISH:
+def get_youtube_service(custom_refresh_token: str | None = None):
+    if not YOUTUBE_AUTO_PUBLISH and not custom_refresh_token:
         return None
-    if not all([YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, YOUTUBE_REFRESH_TOKEN]):
+    
+    refresh_token = custom_refresh_token or YOUTUBE_REFRESH_TOKEN
+    if not all([YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, refresh_token]):
         return None
 
     from google.oauth2.credentials import Credentials
@@ -112,7 +114,7 @@ def get_youtube_service():
 
     credentials = Credentials(
         token=None,
-        refresh_token=YOUTUBE_REFRESH_TOKEN,
+        refresh_token=refresh_token,
         client_id=YOUTUBE_CLIENT_ID,
         client_secret=YOUTUBE_CLIENT_SECRET,
         token_uri="https://oauth2.googleapis.com/token",
@@ -120,10 +122,36 @@ def get_youtube_service():
     return build("youtube", "v3", credentials=credentials)
 
 
-def upload_clip_to_youtube(file_path: Path, clip: dict) -> str:
-    service = get_youtube_service()
+def upload_clip_to_youtube(file_path: Path, clip: dict, job: dict | None = None) -> str:
+    custom_refresh_token = None
+    custom_privacy_status = YOUTUBE_PRIVACY_STATUS
+    custom_hashtags: list[str] = []
+    custom_tags: list[str] = []
+    
+    if job:
+        instructions_str = job.get("instructions")
+        if instructions_str and instructions_str.strip().startswith("{"):
+            try:
+                config = json.loads(instructions_str)
+                if isinstance(config, dict):
+                    custom_refresh_token = config.get("youtube_refresh_token")
+                    custom_privacy_status = config.get("privacy_status", YOUTUBE_PRIVACY_STATUS)
+                    
+                    hashtags_raw = config.get("default_hashtags", "")
+                    tags_raw = config.get("default_tags", "")
+                    
+                    if hashtags_raw:
+                        custom_hashtags = [h.strip() for h in hashtags_raw.split(",") if h.strip()]
+                    if tags_raw:
+                        custom_tags = [t.strip() for t in tags_raw.split(",") if t.strip()]
+            except Exception as e:
+                print("Error parsing job instructions JSON config:", e)
+
+    service = get_youtube_service(custom_refresh_token)
     if service is None:
-        raise RuntimeError("YouTube auto-publish não está configurado. Defina YOUTUBE_AUTO_PUBLISH e as credenciais do Google.")
+        missing_config = get_missing_youtube_config(custom_refresh_token)
+        missing_text = ", ".join(missing_config)
+        raise RuntimeError(f"YouTube auto-publish não está configurado. Faltando: {missing_text}")
 
     from googleapiclient.http import MediaFileUpload
     import re
@@ -167,21 +195,26 @@ def upload_clip_to_youtube(file_path: Path, clip: dict) -> str:
     
     # Generate relevant hashtags based on triggers
     hashtags = ["#shorts", "#viral", "#corte"]
-    for t in triggers:
-        if t == "humor":
-            hashtags.extend(["#humor", "#engraçado", "#comedia"])
-        elif t == "controversy":
-            hashtags.extend(["#polemica", "#debate", "#reflexao"])
-        elif t == "emotional":
-            hashtags.extend(["#motivacao", "#inspiracao", "#superacao"])
-        elif t == "cliffhanger":
-            hashtags.extend(["#curiosidade", "#suspense", "#fatos"])
+    if custom_hashtags:
+        hashtags.extend(custom_hashtags)
+    else:
+        for t in triggers:
+            if t == "humor":
+                hashtags.extend(["#humor", "#engraçado", "#comedia"])
+            elif t == "controversy":
+                hashtags.extend(["#polemica", "#debate", "#reflexao"])
+            elif t == "emotional":
+                hashtags.extend(["#motivacao", "#inspiracao", "#superacao"])
+            elif t == "cliffhanger":
+                hashtags.extend(["#curiosidade", "#suspense", "#fatos"])
             
     desc_lines.append(" ".join(list(set(hashtags))))
     description = "\n".join(desc_lines).strip()[:5000]
 
     # 3. Optimize tags for SEO searchability
     tags_list = [t.strip() for t in triggers if t] + ["cortes", "viral", "shorts", "retencao", "hookhustle"]
+    if custom_tags:
+        tags_list.extend(custom_tags)
     tags = list(set(tags_list))[:50]
 
     body = {
@@ -192,7 +225,7 @@ def upload_clip_to_youtube(file_path: Path, clip: dict) -> str:
             "categoryId": "22",
         },
         "status": {
-            "privacyStatus": YOUTUBE_PRIVACY_STATUS,
+            "privacyStatus": custom_privacy_status,
             "selfDeclaredMadeForKids": False,
         },
     }
@@ -201,6 +234,7 @@ def upload_clip_to_youtube(file_path: Path, clip: dict) -> str:
     request = service.videos().insert(part="snippet,status", body=body, media_body=media)
     response = request.execute()
     return f"https://www.youtube.com/watch?v={response['id']}"
+
 
 
 
@@ -321,7 +355,7 @@ def process_render_job(job: dict) -> None:
                 print(upload_progress)
                 update_job(job_id, {"output_path": upload_progress})
                 
-                youtube_url = upload_clip_to_youtube(rendered, clip)
+                youtube_url = upload_clip_to_youtube(rendered, clip, job)
                 youtube_links.append(youtube_url)
                 print(f"Published to YouTube: {youtube_url}")
             except Exception as upload_exc:
@@ -344,7 +378,17 @@ def process_publish_job(job: dict) -> None:
     job_id = job["id"]
     print(f"Processing publish request: {job_id}")
 
-    missing_config = get_missing_youtube_config()
+    instructions_str = job.get("instructions")
+    custom_refresh_token = None
+    if instructions_str and instructions_str.strip().startswith("{"):
+        try:
+            config = json.loads(instructions_str)
+            if isinstance(config, dict):
+                custom_refresh_token = config.get("youtube_refresh_token")
+        except:
+            pass
+
+    missing_config = get_missing_youtube_config(custom_refresh_token)
     if missing_config:
         missing_text = ", ".join(missing_config)
         raise RuntimeError(
@@ -377,7 +421,7 @@ def process_publish_job(job: dict) -> None:
                 update_job(job_id, {"output_path": f"{original_paths} | {upload_progress}"})
                 
                 clip = clip_items[i]
-                youtube_url = upload_clip_to_youtube(file_path, clip)
+                youtube_url = upload_clip_to_youtube(file_path, clip, job)
                 youtube_links.append(youtube_url)
                 print(f"Published to YouTube: {youtube_url}")
             except Exception as upload_exc:

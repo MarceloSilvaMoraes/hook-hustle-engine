@@ -43,7 +43,30 @@ function YoutubeCallback() {
 
         const refreshToken = result.refreshToken || "";
         if (refreshToken) {
-          window.localStorage.setItem("hook_hustle_youtube_refresh_token", refreshToken);
+          const pendingName = window.localStorage.getItem("pending_channel_profile_name");
+          if (pendingName) {
+            const existingProfilesStr = window.localStorage.getItem("hook_hustle_youtube_profiles") || "[]";
+            let profiles = [];
+            try {
+              profiles = JSON.parse(existingProfilesStr);
+              if (!Array.isArray(profiles)) profiles = [];
+            } catch {
+              profiles = [];
+            }
+            profiles = profiles.filter((p: any) => p.name !== pendingName);
+            profiles.push({
+              name: pendingName,
+              refreshToken: refreshToken,
+              connectedAt: new Date().toISOString(),
+              defaultHashtags: "",
+              defaultTags: "",
+              privacyStatus: "private"
+            });
+            window.localStorage.setItem("hook_hustle_youtube_profiles", JSON.stringify(profiles));
+            window.localStorage.removeItem("pending_channel_profile_name");
+          } else {
+            window.localStorage.setItem("hook_hustle_youtube_refresh_token", refreshToken);
+          }
         }
 
         setStatus("Autenticação concluída. Redirecionando de volta ao app...");

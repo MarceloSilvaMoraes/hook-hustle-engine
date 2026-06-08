@@ -6,12 +6,18 @@ const admin = workerSupabase as any;
 
 const PublishJobInput = z.object({
   jobId: z.string().min(1),
+  youtubeConfig: z.object({
+    youtube_refresh_token: z.string(),
+    privacy_status: z.string(),
+    default_hashtags: z.string().optional().default(""),
+    default_tags: z.string().optional().default(""),
+  }).optional(),
 });
 
 export const publishJobToYoutube = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => PublishJobInput.parse(data))
   .handler(async ({ data }) => {
-    const { jobId } = data;
+    const { jobId, youtubeConfig } = data;
 
     try {
       // Fetch the current job
@@ -46,15 +52,19 @@ export const publishJobToYoutube = createServerFn({ method: "POST" })
       // Check if output has YouTube links
       const outputPath = jobData.output_path || "";
       if (!outputPath.includes("youtube.com")) {
-        // If no YouTube link yet, just mark as "published_requested"
-        // The worker will handle actual publishing if configured
+        const updatePayload: any = {
+          status: "published_requested",
+          updated_at: new Date().toISOString(),
+          error_message: null,
+        };
+
+        if (youtubeConfig) {
+          updatePayload.instructions = JSON.stringify(youtubeConfig);
+        }
+
         const { error: updateError } = await admin
           .from("render_jobs")
-          .update({
-            status: "published_requested",
-            updated_at: new Date().toISOString(),
-            error_message: null,
-          })
+          .update(updatePayload)
           .eq("id", jobId);
 
         if (updateError) {
