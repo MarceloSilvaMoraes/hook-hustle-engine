@@ -19,9 +19,10 @@ interface Props {
   onPlay?: (clip: ViralClip) => void;
   thumbnailConfig?: ThumbnailConfig;
   onThumbnailSave?: (dataUrl: string, config: ThumbnailConfig) => void;
+  youtubeThumbnailDataUrl?: string | null;
 }
 
-export function ClipCard({ clip, index, onPlay, thumbnailConfig, onThumbnailSave }: Props) {
+export function ClipCard({ clip, index, onPlay, thumbnailConfig, onThumbnailSave, youtubeThumbnailDataUrl }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showEditor, setShowEditor] = useState(false);
@@ -78,6 +79,7 @@ TRECHO: "${clip.transcriptExcerpt}"`;
             }
           }}
           width={400}
+          youtubeThumbnailDataUrl={youtubeThumbnailDataUrl}
         />
         <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-all duration-200 flex items-center justify-center gap-2">
           <button
@@ -178,6 +180,7 @@ TRECHO: "${clip.transcriptExcerpt}"`;
           }
           setShowEditor(false);
         }}
+        youtubeThumbnailDataUrl={youtubeThumbnailDataUrl}
       />
 
     </div>

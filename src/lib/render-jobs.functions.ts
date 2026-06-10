@@ -163,4 +163,32 @@ export const deleteRenderJob = createServerFn({ method: "POST" })
     }
   });
 
+export const fetchYoutubeThumbnail = createServerFn({ method: "GET" })
+  .inputValidator((data: unknown) => z.object({ videoId: z.string().min(1) }).parse(data))
+  .handler(async ({ data }) => {
+    const { videoId } = data;
+    const urls = [
+      `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
+      `https://img.youtube.com/vi/${videoId}/sddefault.jpg`,
+      `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+      `https://img.youtube.com/vi/${videoId}/0.jpg`,
+    ];
+    
+    for (const url of urls) {
+      try {
+        const response = await fetch(url);
+        if (response.ok) {
+          const buffer = await response.arrayBuffer();
+          const base64 = Buffer.from(buffer).toString("base64");
+          const contentType = response.headers.get("content-type") || "image/jpeg";
+          return { dataUrl: `data:${contentType};base64,${base64}` };
+        }
+      } catch (e) {
+        console.error(`Error fetching thumbnail from ${url}:`, e);
+      }
+    }
+    return { dataUrl: null };
+  });
+
+
 

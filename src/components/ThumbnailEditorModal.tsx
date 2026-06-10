@@ -14,6 +14,7 @@ interface ThumbnailEditorModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (dataUrl: string, config: ThumbnailConfig) => void;
+  youtubeThumbnailDataUrl?: string | null;
 }
 
 const COMMON_EMOJIS = [
@@ -26,6 +27,7 @@ export function ThumbnailEditorModal({
   isOpen,
   onClose,
   onSave,
+  youtubeThumbnailDataUrl,
 }: ThumbnailEditorModalProps) {
   const [config, setConfig] = useState<ThumbnailConfig>(() => 
     initialConfig || getDefaultConfig(clip)
@@ -53,7 +55,7 @@ export function ThumbnailEditorModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md animate-fade-in p-4 overflow-y-auto">
-      <div className="relative w-full max-w-5xl bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl flex flex-col md:flex-row max-h-[90vh]">
+      <div className="relative w-full max-w-5xl bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl flex flex-col md:flex-row h-auto md:h-[680px] max-h-[95vh] md:max-h-[90vh]">
         {/* Close Button */}
         <button
           onClick={onClose}
@@ -79,6 +81,7 @@ export function ThumbnailEditorModal({
                 config={config}
                 onExport={setCurrentDataUrl}
                 width={540}
+                youtubeThumbnailDataUrl={youtubeThumbnailDataUrl}
               />
             </div>
             
@@ -89,7 +92,7 @@ export function ThumbnailEditorModal({
         </div>
 
         {/* Right Side: Edit Controls Panel */}
-        <div className="w-full md:w-[400px] bg-zinc-950 p-6 md:p-8 flex flex-col justify-between overflow-y-auto max-h-[50vh] md:max-h-none">
+        <div className="w-full md:w-[400px] bg-zinc-950 p-6 md:p-8 flex flex-col justify-between overflow-y-auto h-auto md:h-full">
           <div className="space-y-6">
             <div>
               <h3 className="text-lg font-bold text-white">Editor de Thumbnail</h3>

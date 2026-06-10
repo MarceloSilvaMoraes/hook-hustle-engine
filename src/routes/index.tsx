@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { analyzeTranscript, type ViralClip } from "@/lib/clips.functions";
 import { fetchTranscript } from "@/lib/transcript.functions";
-import { createRenderJob, listRenderJobs, clearOldRenderJobs, retryRenderJob, deleteRenderJob, type RenderJob } from "@/lib/render-jobs.functions";
+import { createRenderJob, listRenderJobs, clearOldRenderJobs, retryRenderJob, deleteRenderJob, fetchYoutubeThumbnail, type RenderJob } from "@/lib/render-jobs.functions";
 import type { RenderJobClip } from "@/lib/render-jobs.types";
 
 import { ClipCard } from "@/components/ClipCard";
@@ -209,6 +209,7 @@ function Index() {
   // Thumbnail states
   const [clipThumbnails, setClipThumbnails] = useState<Record<number, string>>({});
   const [clipThumbnailConfigs, setClipThumbnailConfigs] = useState<Record<number, ThumbnailConfig>>({});
+  const [youtubeThumbnailDataUrl, setYoutubeThumbnailDataUrl] = useState<string | null>(null);
 
   const handleSaveThumbnail = (clipIndex: number, dataUrl: string, config: ThumbnailConfig) => {
     setClipThumbnails((prev) => ({
@@ -408,6 +409,7 @@ function Index() {
     onSuccess: (data) => {
       setClipThumbnails({});
       setClipThumbnailConfigs({});
+      setYoutubeThumbnailDataUrl(null);
       setClips(data);
       toast.success(`${data.length} clipes virais extraídos`);
       setTimeout(() => {
@@ -425,6 +427,25 @@ function Index() {
     }
     setJobs(result.jobs ?? []);
   };
+
+  const fetchFn = useServerFn(fetchYoutubeThumbnail);
+
+  // Auto-fetch original YouTube thumbnail whenever videoId is resolved
+  useEffect(() => {
+    if (!videoId) {
+      setYoutubeThumbnailDataUrl(null);
+      return;
+    }
+    let cancelled = false;
+    fetchFn({ data: { videoId } }).then((result) => {
+      if (!cancelled && result.dataUrl) {
+        setYoutubeThumbnailDataUrl(result.dataUrl);
+      }
+    }).catch(() => {
+      // silently fallback to gradient
+    });
+    return () => { cancelled = true; };
+  }, [videoId]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1381,6 +1402,7 @@ function Index() {
                     index={idx}
                     thumbnailConfig={clipThumbnailConfigs[idx]}
                     onThumbnailSave={(dataUrl, config) => handleSaveThumbnail(idx, dataUrl, config)}
+                    youtubeThumbnailDataUrl={youtubeThumbnailDataUrl}
                     onPlay={
                       videoId
                         ? (c) => {

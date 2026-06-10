@@ -15,6 +15,7 @@ interface ThumbnailCanvasProps {
   config?: ThumbnailConfig;
   onExport?: (dataUrl: string) => void;
   width?: number; // Visual width for scaling preview
+  youtubeThumbnailDataUrl?: string | null;
 }
 
 export const COLOR_SCHEMES: Record<string, { colors: [string, string]; emoji: string; label: string }> = {
@@ -40,7 +41,7 @@ export function getDefaultConfig(clip: ViralClip): ThumbnailConfig {
   };
 }
 
-export function ThumbnailCanvas({ clip, config, onExport, width = 320 }: ThumbnailCanvasProps) {
+export function ThumbnailCanvas({ clip, config, onExport, width = 320, youtubeThumbnailDataUrl }: ThumbnailCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
   // Calculate scaled height for 16:9 ratio
@@ -54,190 +55,214 @@ export function ThumbnailCanvas({ clip, config, onExport, width = 320 }: Thumbna
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // 1. Reset and Clear Canvas (Native resolution: 1280x720)
-    ctx.clearRect(0, 0, 1280, 720);
-    ctx.shadowColor = "transparent";
-    ctx.shadowBlur = 0;
-    ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 0;
-
-    // 2. Background Gradient
-    const schemeInfo = COLOR_SCHEMES[currentConfig.colorScheme] || COLOR_SCHEMES.hook;
-    const grad = ctx.createLinearGradient(0, 0, 1280, 720);
-    grad.addColorStop(0, schemeInfo.colors[0]);
-    grad.addColorStop(1, schemeInfo.colors[1]);
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, 1280, 720);
-
-    // 3. Subtle background pattern for premium feel (diagonal stripes)
-    ctx.fillStyle = "rgba(255, 255, 255, 0.04)";
-    for (let i = -720; i < 1280; i += 60) {
-      ctx.beginPath();
-      ctx.moveTo(i, 0);
-      ctx.lineTo(i + 150, 720);
-      ctx.lineTo(i + 190, 720);
-      ctx.lineTo(i + 40, 0);
-      ctx.closePath();
-      ctx.fill();
-    }
-
-    // Radial dark vignette around the edges to make content pop
-    const vignette = ctx.createRadialGradient(640, 360, 200, 640, 360, 750);
-    vignette.addColorStop(0, "rgba(0, 0, 0, 0)");
-    vignette.addColorStop(0.6, "rgba(0, 0, 0, 0.4)");
-    vignette.addColorStop(1, "rgba(0, 0, 0, 0.85)");
-    ctx.fillStyle = vignette;
-    ctx.fillRect(0, 0, 1280, 720);
-
-    // 4. Large Decorative Emoji (Right side)
-    if (currentConfig.emoji) {
-      ctx.save();
-      ctx.font = "240px 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      // Slightly rotated
-      ctx.translate(1000, 420);
-      ctx.rotate((15 * Math.PI) / 180);
-      // Semi-transparent overlay style
-      ctx.globalAlpha = 0.85;
-      
-      // Shadow for emoji
-      ctx.shadowColor = "rgba(0,0,0,0.5)";
-      ctx.shadowBlur = 30;
-      ctx.shadowOffsetX = 10;
-      ctx.shadowOffsetY = 10;
-      
-      ctx.fillText(currentConfig.emoji, 0, 0);
-      ctx.restore();
-    }
-
-    // 5. Score Badge (Top Right)
-    if (currentConfig.showScore) {
-      ctx.save();
-      const bx = 1130;
-      const by = 110;
-      const radius = 65;
-
-      // Outer Glow/Border
-      ctx.shadowColor = schemeInfo.colors[0];
-      ctx.shadowBlur = 20;
-      
-      ctx.beginPath();
-      ctx.arc(bx, by, radius, 0, 2 * Math.PI);
-      ctx.fillStyle = "#09090b"; // dark surface
-      ctx.strokeStyle = "#ffffff";
-      ctx.lineWidth = 6;
-      ctx.fill();
-      ctx.stroke();
-
-      // Score Value
+    const drawCanvas = (bgImg: HTMLImageElement | null) => {
+      // 1. Reset and Clear Canvas (Native resolution: 1280x720)
+      ctx.clearRect(0, 0, 1280, 720);
       ctx.shadowColor = "transparent";
       ctx.shadowBlur = 0;
-      ctx.fillStyle = "#ffffff";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.font = "900 50px 'Outfit', 'Montserrat', 'Inter', sans-serif";
-      ctx.fillText(clip.score.toString(), bx, by - 10);
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
 
-      // Score Label
-      ctx.font = "bold 13px 'Outfit', 'Montserrat', 'Inter', sans-serif";
-      ctx.fillStyle = schemeInfo.colors[1];
-      ctx.fillText("VIRAL SCORE", bx, by + 28);
-      ctx.restore();
-    }
+      const schemeInfo = COLOR_SCHEMES[currentConfig.colorScheme] || COLOR_SCHEMES.hook;
 
-    // 6. Draw Text (Title & Subtitle)
-    ctx.save();
-    
-    // Set standard drawing settings
-    ctx.textAlign = "left";
-    ctx.textBaseline = "top";
-    
-    // Wrap Title text
-    const titleFontSize = 75;
-    ctx.font = `900 ${titleFontSize}px 'Outfit', 'Montserrat', 'Inter', 'Segoe UI', sans-serif`;
-    
-    const maxTextWidth = 750; // Keep space for the emoji and score badge on the right
-    const titleLineHeight = titleFontSize * 1.15;
-    const titleLines = wrapText(ctx, currentConfig.titleText.toUpperCase(), maxTextWidth);
-    
-    // Wrap Subtitle text
-    const subFontSize = 42;
-    ctx.font = `italic 700 ${subFontSize}px 'Outfit', 'Montserrat', 'Inter', 'Segoe UI', sans-serif`;
-    const subLineHeight = subFontSize * 1.25;
-    const subLines = currentConfig.subText ? wrapText(ctx, `"${currentConfig.subText}"`, maxTextWidth) : [];
-    
-    // Calculate total height of text block
-    const textGap = 40;
-    const totalTitleHeight = titleLines.length * titleLineHeight;
-    const totalSubHeight = subLines.length > 0 ? (subLines.length * subLineHeight) + textGap : 0;
-    const totalTextHeight = totalTitleHeight + totalSubHeight;
-    
-    // Decide starting Y position based on configuration
-    let startY = 120; // Default top
-    if (currentConfig.textPosition === "center") {
-      startY = (720 - totalTextHeight) / 2;
-    } else if (currentConfig.textPosition === "bottom") {
-      startY = 720 - 120 - totalTextHeight;
-    }
-    
-    // Draw Title Lines
-    titleLines.forEach((line, idx) => {
-      const lineY = startY + idx * titleLineHeight;
-      
-      // Shadow and stroke effects for YouTube style
-      ctx.shadowColor = "rgba(0, 0, 0, 0.9)";
-      ctx.shadowBlur = 15;
-      ctx.shadowOffsetX = 4;
-      ctx.shadowOffsetY = 6;
-      
-      // Outer stroke
-      ctx.strokeStyle = "#000000";
+      // 2. Background (Image or Gradient)
+      if (bgImg) {
+        // Draw YouTube thumbnail to cover canvas
+        ctx.drawImage(bgImg, 0, 0, 1280, 720);
+
+        // Dark linear overlay on the left to make white text pop, fading to transparent on the right (characters visible)
+        const overlay = ctx.createLinearGradient(0, 0, 1280, 0);
+        overlay.addColorStop(0, "rgba(0, 0, 0, 0.92)");
+        overlay.addColorStop(0.4, "rgba(0, 0, 0, 0.78)");
+        overlay.addColorStop(0.65, "rgba(0, 0, 0, 0.3)");
+        overlay.addColorStop(1, "rgba(0, 0, 0, 0.05)");
+        ctx.fillStyle = overlay;
+        ctx.fillRect(0, 0, 1280, 720);
+      } else {
+        // Gradient Background
+        const grad = ctx.createLinearGradient(0, 0, 1280, 720);
+        grad.addColorStop(0, schemeInfo.colors[0]);
+        grad.addColorStop(1, schemeInfo.colors[1]);
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 1280, 720);
+
+        // Subtle background pattern (diagonal stripes)
+        ctx.fillStyle = "rgba(255, 255, 255, 0.04)";
+        for (let i = -720; i < 1280; i += 60) {
+          ctx.beginPath();
+          ctx.moveTo(i, 0);
+          ctx.lineTo(i + 150, 720);
+          ctx.lineTo(i + 190, 720);
+          ctx.lineTo(i + 40, 0);
+          ctx.closePath();
+          ctx.fill();
+        }
+      }
+
+      // 3. Themed Border (accent color of the trigger)
+      ctx.strokeStyle = schemeInfo.colors[0];
       ctx.lineWidth = 14;
+      ctx.strokeRect(0, 0, 1280, 720);
+
+      // Radial dark vignette around the edges
+      const vignette = ctx.createRadialGradient(640, 360, 250, 640, 360, 750);
+      vignette.addColorStop(0, "rgba(0, 0, 0, 0)");
+      vignette.addColorStop(0.6, "rgba(0, 0, 0, 0.35)");
+      vignette.addColorStop(1, "rgba(0, 0, 0, 0.8)");
+      ctx.fillStyle = vignette;
+      ctx.fillRect(0, 0, 1280, 720);
+
+      // 4. Large Decorative Emoji (Right side)
+      if (currentConfig.emoji) {
+        ctx.save();
+        ctx.font = "240px 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.translate(1000, 420);
+        ctx.rotate((15 * Math.PI) / 180);
+        ctx.globalAlpha = 0.85;
+        
+        ctx.shadowColor = "rgba(0,0,0,0.5)";
+        ctx.shadowBlur = 30;
+        ctx.shadowOffsetX = 10;
+        ctx.shadowOffsetY = 10;
+        
+        ctx.fillText(currentConfig.emoji, 0, 0);
+        ctx.restore();
+      }
+
+      // 5. Score Badge (Top Right)
+      if (currentConfig.showScore) {
+        ctx.save();
+        const bx = 1130;
+        const by = 110;
+        const radius = 65;
+
+        // Outer Glow/Border
+        ctx.shadowColor = schemeInfo.colors[0];
+        ctx.shadowBlur = 20;
+        
+        ctx.beginPath();
+        ctx.arc(bx, by, radius, 0, 2 * Math.PI);
+        ctx.fillStyle = "#09090b"; // dark surface
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 6;
+        ctx.fill();
+        ctx.stroke();
+
+        // Score Value
+        ctx.shadowColor = "transparent";
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = "#ffffff";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.font = "900 50px 'Outfit', 'Montserrat', 'Inter', sans-serif";
+        ctx.fillText(clip.score.toString(), bx, by - 10);
+
+        // Score Label
+        ctx.font = "bold 13px 'Outfit', 'Montserrat', 'Inter', sans-serif";
+        ctx.fillStyle = schemeInfo.colors[1];
+        ctx.fillText("VIRAL SCORE", bx, by + 28);
+        ctx.restore();
+      }
+
+      // 6. Draw Text (Title & Subtitle)
+      ctx.save();
+      ctx.textAlign = "left";
+      ctx.textBaseline = "top";
+      
+      const titleFontSize = 75;
       ctx.font = `900 ${titleFontSize}px 'Outfit', 'Montserrat', 'Inter', 'Segoe UI', sans-serif`;
-      ctx.strokeText(line, 80, lineY);
       
-      // Inner fill
-      ctx.fillStyle = "#ffffff";
-      ctx.fillText(line, 80, lineY);
-    });
-    
-    // Draw Subtitle Lines (Subtext)
-    if (subLines.length > 0) {
-      const subStartY = startY + totalTitleHeight + textGap;
+      const maxTextWidth = 780; // Keep space for emoji/score on the right
+      const titleLineHeight = titleFontSize * 1.15;
+      const titleLines = wrapText(ctx, currentConfig.titleText.toUpperCase(), maxTextWidth);
       
-      subLines.forEach((line, idx) => {
-        const lineY = subStartY + idx * subLineHeight;
+      const subFontSize = 42;
+      ctx.font = `italic 700 ${subFontSize}px 'Outfit', 'Montserrat', 'Inter', 'Segoe UI', sans-serif`;
+      const subLineHeight = subFontSize * 1.25;
+      const subLines = currentConfig.subText ? wrapText(ctx, `"${currentConfig.subText}"`, maxTextWidth) : [];
+      
+      const textGap = 40;
+      const totalTitleHeight = titleLines.length * titleLineHeight;
+      const totalSubHeight = subLines.length > 0 ? (subLines.length * subLineHeight) + textGap : 0;
+      const totalTextHeight = totalTitleHeight + totalSubHeight;
+      
+      let startY = 120; // Default top
+      if (currentConfig.textPosition === "center") {
+        startY = (720 - totalTextHeight) / 2;
+      } else if (currentConfig.textPosition === "bottom") {
+        startY = 720 - 120 - totalTextHeight;
+      }
+      
+      // Draw Title Lines
+      titleLines.forEach((line, idx) => {
+        const lineY = startY + idx * titleLineHeight;
         
-        ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
-        ctx.shadowBlur = 10;
-        ctx.shadowOffsetX = 3;
-        ctx.shadowOffsetY = 4;
+        ctx.shadowColor = "rgba(0, 0, 0, 0.9)";
+        ctx.shadowBlur = 15;
+        ctx.shadowOffsetX = 4;
+        ctx.shadowOffsetY = 6;
         
-        // Stroke
         ctx.strokeStyle = "#000000";
-        ctx.lineWidth = 10;
-        ctx.font = `italic 700 ${subFontSize}px 'Outfit', 'Montserrat', 'Inter', 'Segoe UI', sans-serif`;
+        ctx.lineWidth = 14;
+        ctx.font = `900 ${titleFontSize}px 'Outfit', 'Montserrat', 'Inter', 'Segoe UI', sans-serif`;
         ctx.strokeText(line, 80, lineY);
         
-        // Fill (yellow-ish accent)
-        ctx.fillStyle = "#FFD700"; // Gold color for subtitle emphasis
+        ctx.fillStyle = "#ffffff";
         ctx.fillText(line, 80, lineY);
       });
-    }
-
-    ctx.restore();
-
-    // 7. Trigger Export callback
-    if (onExport) {
-      try {
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
-        onExport(dataUrl);
-      } catch (err) {
-        console.error("Erro ao exportar canvas da thumbnail:", err);
+      
+      // Draw Subtitle Lines (Subtext)
+      if (subLines.length > 0) {
+        const subStartY = startY + totalTitleHeight + textGap;
+        
+        subLines.forEach((line, idx) => {
+          const lineY = subStartY + idx * subLineHeight;
+          
+          ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
+          ctx.shadowBlur = 10;
+          ctx.shadowOffsetX = 3;
+          ctx.shadowOffsetY = 4;
+          
+          ctx.strokeStyle = "#000000";
+          ctx.lineWidth = 10;
+          ctx.font = `italic 700 ${subFontSize}px 'Outfit', 'Montserrat', 'Inter', 'Segoe UI', sans-serif`;
+          ctx.strokeText(line, 80, lineY);
+          
+          ctx.fillStyle = "#FFD700"; // Gold color for subtitle emphasis
+          ctx.fillText(line, 80, lineY);
+        });
       }
+
+      ctx.restore();
+
+      // 7. Trigger Export callback
+      if (onExport) {
+        try {
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+          onExport(dataUrl);
+        } catch (err) {
+          console.error("Erro ao exportar canvas da thumbnail:", err);
+        }
+      }
+    };
+
+    if (youtubeThumbnailDataUrl) {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.src = youtubeThumbnailDataUrl;
+      img.onload = () => {
+        drawCanvas(img);
+      };
+      img.onerror = (e) => {
+        console.error("Erro ao carregar imagem de fundo da thumbnail. Usando fallback de gradiente.", e);
+        drawCanvas(null);
+      };
+    } else {
+      drawCanvas(null);
     }
-  }, [clip, currentConfig, onExport]);
+  }, [clip, currentConfig, youtubeThumbnailDataUrl, onExport]);
 
   // Helper to wrap text
   const wrapText = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number) => {
