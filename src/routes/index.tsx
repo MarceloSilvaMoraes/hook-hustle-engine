@@ -203,6 +203,7 @@ function Index() {
   const [channelTab, setChannelTab] = useState<"youtube" | "tiktok">("youtube");
   const [openYoutubeDropdown, setOpenYoutubeDropdown] = useState<string | null>(null);
   const [openTiktokDropdown, setOpenTiktokDropdown] = useState<string | null>(null);
+  const [showWorkerModal, setShowWorkerModal] = useState(false);
 
 
   const analyze = useServerFn(analyzeTranscript);
@@ -294,6 +295,7 @@ function Index() {
     onSuccess: (job) => {
       setJobs((prev) => [job, ...prev]);
       toast.success("Job criado e enviado para o worker local.");
+      setShowWorkerModal(true);
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -2056,6 +2058,126 @@ function Index() {
           </span>
         </div>
       </footer>
+
+      {/* Pop-up: Como Iniciar o Worker Local */}
+      {showWorkerModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-fade-in">
+          <div 
+            className="relative w-full max-w-2xl bg-surface border border-primary/30 rounded-3xl p-6 md:p-8 shadow-2xl shadow-primary/20 animate-scale-up"
+            style={{ background: "linear-gradient(180deg, rgba(19, 19, 32, 0.95) 0%, rgba(9, 9, 15, 0.98) 100%)" }}
+          >
+            {/* Header */}
+            <div className="flex items-start justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="size-10 rounded-xl bg-primary/10 border border-primary/30 flex items-center justify-center text-primary text-xl font-bold">
+                  🚀
+                </div>
+                <div>
+                  <h3 className="font-display text-2xl tracking-tight">Job Criado com Sucesso!</h3>
+                  <p className="text-xs font-mono uppercase tracking-widest text-primary mt-0.5">Ação Necessária</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowWorkerModal(false)}
+                className="text-muted-foreground hover:text-foreground text-sm font-mono px-3 py-1.5 border border-border rounded-xl transition-all"
+              >
+                [ Fechar ]
+              </button>
+            </div>
+
+            {/* Warning Box */}
+            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs leading-relaxed mb-6 font-mono">
+              ⚠️ O site enviou o seu pedido para a fila, mas você precisa iniciar o <strong>Worker Local</strong> no seu computador para que ele possa baixar, cortar o vídeo e publicar.
+            </div>
+
+            {/* Steps */}
+            <div className="space-y-4 mb-8">
+              <h4 className="text-xs uppercase tracking-widest text-muted-foreground font-mono">Passo a Passo para Iniciar</h4>
+              
+              {/* Step 1 */}
+              <div className="flex gap-4">
+                <div className="size-6 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center font-mono text-xs font-bold text-primary shrink-0 mt-0.5">
+                  1
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">Abra a pasta do projeto no seu PC</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Vá até o diretório onde o código está salvo:</p>
+                  <code className="block mt-1 p-2 rounded bg-background border border-border font-mono text-[10.5px] select-all">
+                    c:\Users\user\Desktop\hook-hustle-engine
+                  </code>
+                </div>
+              </div>
+
+              {/* Step 2 */}
+              <div className="flex gap-4">
+                <div className="size-6 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center font-mono text-xs font-bold text-primary shrink-0 mt-0.5">
+                  2
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold">Inicie o Worker (Escolha uma opção)</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
+                    {/* Option A */}
+                    <div className="p-3.5 rounded-2xl border border-border bg-background/40 hover:border-primary/20 transition-all">
+                      <p className="text-xs font-bold text-emerald-400">Opção A (Recomendada - Silenciosa)</p>
+                      <p className="text-[11px] text-muted-foreground mt-1 leading-normal">
+                        Dê dois cliques no arquivo:
+                      </p>
+                      <code className="block mt-1 font-mono text-[10px] text-primary">INICIAR_TRABALHO_SILENCIOSO.vbs</code>
+                      <p className="text-[9.5px] text-muted-foreground mt-1">O worker rodará em segundo plano, sem abrir janelas.</p>
+                    </div>
+
+                    {/* Option B */}
+                    <div className="p-3.5 rounded-2xl border border-border bg-background/40 hover:border-primary/20 transition-all">
+                      <p className="text-xs font-bold text-primary">Opção B (Pelo terminal - Com Logs)</p>
+                      <p className="text-[11px] text-muted-foreground mt-1 leading-normal">
+                        Abra o terminal na pasta do projeto e digite:
+                      </p>
+                      <div className="flex items-center gap-1.5 mt-1 bg-background p-1.5 rounded border border-border">
+                        <code className="font-mono text-[10px] truncate select-all">python worker.py</code>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText("python worker.py");
+                            toast.success("Comando copiado!");
+                          }}
+                          className="text-[9px] font-mono px-1.5 py-0.5 bg-primary/20 text-primary rounded border border-primary/30"
+                        >
+                          Copiar
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 3 */}
+              <div className="flex gap-4">
+                <div className="size-6 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center font-mono text-xs font-bold text-primary shrink-0 mt-0.5">
+                  3
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">Acompanhe o processamento</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    O worker processa a fila a cada 15 segundos. O status do job mudará de "na fila" para "processando" automaticamente.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer Buttons */}
+            <div className="flex justify-end gap-3 pt-4 border-t border-border/60">
+              <button
+                type="button"
+                onClick={() => setShowWorkerModal(false)}
+                className="btn btn-primary px-6 py-2.5 font-display text-sm uppercase tracking-wider cursor-pointer"
+              >
+                Entendi, vou iniciar! 👍
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
