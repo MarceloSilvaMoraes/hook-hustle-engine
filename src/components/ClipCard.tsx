@@ -1,6 +1,8 @@
 import { useState } from "react";
-import { Copy, Check, ChevronDown, Play } from "lucide-react";
+import { Copy, Check, ChevronDown, Play, Paintbrush } from "lucide-react";
 import type { ViralClip } from "@/lib/clips.functions";
+import { ThumbnailCanvas, type ThumbnailConfig, getDefaultConfig } from "./ThumbnailCanvas";
+import { ThumbnailEditorModal } from "./ThumbnailEditorModal";
 
 const TRIGGER_LABELS: Record<string, string> = {
   hook: "The Hook",
@@ -15,11 +17,14 @@ interface Props {
   clip: ViralClip;
   index: number;
   onPlay?: (clip: ViralClip) => void;
+  thumbnailConfig?: ThumbnailConfig;
+  onThumbnailSave?: (dataUrl: string, config: ThumbnailConfig) => void;
 }
 
-export function ClipCard({ clip, index, onPlay }: Props) {
+export function ClipCard({ clip, index, onPlay, thumbnailConfig, onThumbnailSave }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [showEditor, setShowEditor] = useState(false);
 
   const isTop = index === 0;
   const scoreColor = clip.score >= 90 ? "border-primary" : clip.score >= 75 ? "border-primary/60" : "border-border";
@@ -58,6 +63,30 @@ TRECHO: "${clip.transcriptExcerpt}"`;
           <div className="font-mono text-[10px] text-muted-foreground mt-1">
             {clip.durationSeconds}s
           </div>
+        </div>
+      </div>
+
+      {/* Miniatura da Thumbnail */}
+      <div className="relative aspect-video w-full rounded-xl overflow-hidden mb-5 bg-zinc-950 border border-zinc-855/20 flex items-center justify-center">
+        <ThumbnailCanvas
+          clip={clip}
+          config={thumbnailConfig}
+          onExport={(dataUrl) => {
+            if (onThumbnailSave && !thumbnailConfig) {
+              const defaultConfig = getDefaultConfig(clip);
+              onThumbnailSave(dataUrl, defaultConfig);
+            }
+          }}
+          width={400}
+        />
+        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-all duration-200 flex items-center justify-center gap-2">
+          <button
+            onClick={() => setShowEditor(true)}
+            className="bg-white text-zinc-950 hover:bg-white/90 text-xs font-bold py-2 px-3.5 rounded-lg flex items-center gap-1.5 transition-all active:scale-95 shadow-lg shadow-black/20"
+          >
+            <Paintbrush className="size-3.5" />
+            Editar Thumbnail
+          </button>
         </div>
       </div>
 
@@ -137,6 +166,20 @@ TRECHO: "${clip.transcriptExcerpt}"`;
           </button>
         </div>
       )}
+
+      <ThumbnailEditorModal
+        clip={clip}
+        initialConfig={thumbnailConfig}
+        isOpen={showEditor}
+        onClose={() => setShowEditor(false)}
+        onSave={(dataUrl, config) => {
+          if (onThumbnailSave) {
+            onThumbnailSave(dataUrl, config);
+          }
+          setShowEditor(false);
+        }}
+      />
+
     </div>
   );
 }

@@ -9,6 +9,7 @@ import { createRenderJob, listRenderJobs, clearOldRenderJobs, retryRenderJob, de
 import type { RenderJobClip } from "@/lib/render-jobs.types";
 
 import { ClipCard } from "@/components/ClipCard";
+import type { ThumbnailConfig } from "@/components/ThumbnailCanvas";
 import { Toaster } from "@/components/ui/sonner";
 import { getGoogleClientId, resolveOAuthRedirectUri } from "@/lib/youtube-auth.functions";
 import { exchangeYoutubeCode } from "@/lib/youtube-auth.server";
@@ -205,6 +206,21 @@ function Index() {
   const [openTiktokDropdown, setOpenTiktokDropdown] = useState<string | null>(null);
   const [showWorkerModal, setShowWorkerModal] = useState(false);
 
+  // Thumbnail states
+  const [clipThumbnails, setClipThumbnails] = useState<Record<number, string>>({});
+  const [clipThumbnailConfigs, setClipThumbnailConfigs] = useState<Record<number, ThumbnailConfig>>({});
+
+  const handleSaveThumbnail = (clipIndex: number, dataUrl: string, config: ThumbnailConfig) => {
+    setClipThumbnails((prev) => ({
+      ...prev,
+      [clipIndex]: dataUrl,
+    }));
+    setClipThumbnailConfigs((prev) => ({
+      ...prev,
+      [clipIndex]: config,
+    }));
+  };
+
 
   const analyze = useServerFn(analyzeTranscript);
   const exchange = useServerFn(exchangeYoutubeCode);
@@ -251,7 +267,7 @@ function Index() {
         throw new Error("É necessário um link de vídeo para criar um job local.");
       }
 
-      let jobInstructions = `Renderize localmente em ${renderFormat} a partir do vídeo ${sourceUrl.trim()}`;
+      let jobInstructions = JSON.stringify({ target_platform: "local" });
       if (selectedProfile) {
         const profile = youtubeProfiles.find(p => p.name === selectedProfile);
         if (profile && profile.refreshToken) {
@@ -281,7 +297,10 @@ function Index() {
           videoTitle,
           platform,
           renderFormat,
-          clipItems: clips,
+          clipItems: clips.map((c, idx) => ({
+            ...c,
+            thumbnailDataUrl: clipThumbnails[idx] || null,
+          })),
           instructions: jobInstructions,
         },
       });
@@ -387,6 +406,8 @@ function Index() {
       return result.clips;
     },
     onSuccess: (data) => {
+      setClipThumbnails({});
+      setClipThumbnailConfigs({});
       setClips(data);
       toast.success(`${data.length} clipes virais extraídos`);
       setTimeout(() => {
@@ -1358,6 +1379,8 @@ function Index() {
                     key={idx}
                     clip={clip}
                     index={idx}
+                    thumbnailConfig={clipThumbnailConfigs[idx]}
+                    onThumbnailSave={(dataUrl, config) => handleSaveThumbnail(idx, dataUrl, config)}
                     onPlay={
                       videoId
                         ? (c) => {

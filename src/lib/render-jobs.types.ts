@@ -12,6 +12,7 @@ export interface RenderJobClip {
   captionStyle: string;
   brollSuggestion: string;
   transcriptExcerpt: string;
+  thumbnailDataUrl?: string | null;
 }
 
 export interface RenderJobRow {

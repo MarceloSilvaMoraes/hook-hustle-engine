@@ -16,6 +16,7 @@ const RenderJobClipSchema = z.object({
   captionStyle: z.string().min(1).max(500),
   brollSuggestion: z.string().min(1).max(500),
   transcriptExcerpt: z.string().min(1).max(1000),
+  thumbnailDataUrl: z.string().optional().nullable(),
 });
 
 const createRenderJobInput = z.object({

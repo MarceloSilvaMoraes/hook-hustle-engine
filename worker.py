@@ -122,6 +122,37 @@ def get_youtube_service(custom_refresh_token: str | None = None):
     return build("youtube", "v3", credentials=credentials)
 
 
+def upload_thumbnail_to_youtube(service, video_id: str, thumbnail_data_url: str) -> None:
+    import base64, tempfile, os
+    try:
+        if not thumbnail_data_url or not isinstance(thumbnail_data_url, str) or "," not in thumbnail_data_url:
+            print("Thumbnail data URL is invalid or empty.")
+            return
+            
+        header, encoded = thumbnail_data_url.split(",", 1)
+        img_bytes = base64.b64decode(encoded)
+        ext = "jpg" if "jpeg" in header or "jpg" in header else "png"
+        
+        with tempfile.NamedTemporaryFile(suffix=f".{ext}", delete=False) as f:
+            f.write(img_bytes)
+            tmp_path = f.name
+            
+        try:
+            from googleapiclient.http import MediaFileUpload
+            service.thumbnails().set(
+                videoId=video_id,
+                media_body=MediaFileUpload(tmp_path, mimetype=f"image/{ext}")
+            ).execute()
+            print(f"Thumbnail enviada com sucesso para o video_id: {video_id}")
+        except Exception as api_err:
+            print(f"Erro na API de thumbnails do YouTube para o video {video_id}: {api_err}")
+        finally:
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+    except Exception as e:
+        print(f"Erro geral ao processar upload da thumbnail para o video {video_id}: {e}")
+
+
 def upload_clip_to_youtube(file_path: Path, clip: dict, job: dict | None = None) -> str:
     custom_refresh_token = None
     custom_privacy_status = YOUTUBE_PRIVACY_STATUS
@@ -233,7 +264,14 @@ def upload_clip_to_youtube(file_path: Path, clip: dict, job: dict | None = None)
     media = MediaFileUpload(str(file_path), chunksize=-1, resumable=True, mimetype="video/mp4")
     request = service.videos().insert(part="snippet,status", body=body, media_body=media)
     response = request.execute()
-    return f"https://www.youtube.com/watch?v={response['id']}"
+    
+    video_id = response['id']
+    thumbnail_data_url = clip.get("thumbnailDataUrl")
+    if thumbnail_data_url:
+        print(f"Processando thumbnail para o video_id: {video_id}...")
+        upload_thumbnail_to_youtube(service, video_id, thumbnail_data_url)
+        
+    return f"https://www.youtube.com/watch?v={video_id}"
 
 
 
@@ -444,31 +482,38 @@ def process_render_job(job: dict) -> None:
 
     # Otherwise YouTube publish or just done
     youtube_links = []
-    if YOUTUBE_AUTO_PUBLISH or (instructions_str and instructions_str.strip().startswith("{")):
-        # Let's check if youtube token is in instructions
-        custom_refresh_token = None
-        if instructions_str and instructions_str.strip().startswith("{"):
-            try:
-                config = json.loads(instructions_str)
-                if isinstance(config, dict):
+    is_youtube = False
+    custom_refresh_token = None
+    
+    if instructions_str and instructions_str.strip().startswith("{"):
+        try:
+            config = json.loads(instructions_str)
+            if isinstance(config, dict):
+                target_platform = config.get("target_platform")
+                if target_platform in ("tiktok", "local"):
+                    is_youtube = False
+                else:
                     custom_refresh_token = config.get("youtube_refresh_token")
-            except:
-                pass
-        
-        if YOUTUBE_AUTO_PUBLISH or custom_refresh_token:
-            for i, rendered in enumerate(rendered_files):
-                try:
-                    upload_progress = f"Progress: Enviando clipe {i+1} de {len(rendered_files)} para o YouTube..."
-                    print(upload_progress)
-                    update_job(job_id, {"output_path": upload_progress})
-                    
-                    clip = clip_items[i]
-                    youtube_url = upload_clip_to_youtube(rendered, clip, job)
-                    clip["youtube_url"] = youtube_url  # Save the uploaded youtube url
-                    youtube_links.append(youtube_url)
-                    print(f"Published to YouTube: {youtube_url}")
-                except Exception as upload_exc:
-                    print("YouTube upload failed:", upload_exc)
+                    is_youtube = True
+        except:
+            pass
+    elif YOUTUBE_AUTO_PUBLISH:
+        is_youtube = True
+
+    if is_youtube or custom_refresh_token:
+        for i, rendered in enumerate(rendered_files):
+            try:
+                upload_progress = f"Progress: Enviando clipe {i+1} de {len(rendered_files)} para o YouTube..."
+                print(upload_progress)
+                update_job(job_id, {"output_path": upload_progress})
+                
+                clip = clip_items[i]
+                youtube_url = upload_clip_to_youtube(rendered, clip, job)
+                clip["youtube_url"] = youtube_url  # Save the uploaded youtube url
+                youtube_links.append(youtube_url)
+                print(f"Published to YouTube: {youtube_url}")
+            except Exception as upload_exc:
+                print("YouTube upload failed:", upload_exc)
 
     rendered_files_strs = [str(f) for f in rendered_files]
     original_paths = " | ".join(rendered_files_strs) if rendered_files_strs else str(OUTPUT_DIR)
