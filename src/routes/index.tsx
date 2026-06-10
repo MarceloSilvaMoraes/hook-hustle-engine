@@ -1680,6 +1680,7 @@ function Index() {
               <h3 className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-1">Histórico de Jobs</h3>
               {historyJobs.map((job) => {
                 const jobYoutubeLinks = extractYoutubeLinks(job.output_path);
+                const clipItems = (job.clip_items as RenderJobClip[]) || [];
                 return (
                   <div key={job.id} className="p-4 rounded-2xl border border-border/60 bg-background/50 hover:bg-background/80 hover:border-border transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 text-sm">
                     <div className="min-w-0 flex-1">
