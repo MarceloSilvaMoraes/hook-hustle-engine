@@ -201,6 +201,8 @@ function Index() {
   const [newTikTokSessionCookie, setNewTikTokSessionCookie] = useState<string>("");
   const [newTikTokHashtags, setNewTikTokHashtags] = useState<string>("#shorts,#tiktok,#viral");
   const [channelTab, setChannelTab] = useState<"youtube" | "tiktok">("youtube");
+  const [openYoutubeDropdown, setOpenYoutubeDropdown] = useState<string | null>(null);
+  const [openTiktokDropdown, setOpenTiktokDropdown] = useState<string | null>(null);
 
 
   const analyze = useServerFn(analyzeTranscript);
@@ -1743,28 +1745,31 @@ function Index() {
 
                       if (connectedProfiles.length > 0) {
                         return (
-                          <div className="relative group inline-block text-left">
+                          <div className="relative inline-block text-left">
                             <button
                               type="button"
                               disabled={publishMutation.isPending}
                               className="btn btn-youtube"
+                              onClick={() => { setOpenYoutubeDropdown(openYoutubeDropdown === job.id ? null : job.id); setOpenTiktokDropdown(null); }}
                             >
                               <svg viewBox="0 0 24 24" className="size-3 fill-current" aria-hidden="true"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
                               {publishMutation.isPending ? "Subindo..." : "YouTube ▾"}
                             </button>
-                            <div className="absolute right-0 bottom-full mb-1 w-48 bg-surface border border-border rounded-xl shadow-xl hidden group-hover:block hover:block z-50 overflow-hidden font-mono text-xs">
-                              <div className="px-3 py-2 bg-background border-b border-border text-[9px] uppercase tracking-widest text-muted-foreground">Escolha o Canal:</div>
-                              {connectedProfiles.map((p) => (
-                                <button
-                                  key={p.name}
-                                  type="button"
-                                  onClick={() => publishMutation.mutate({ jobId: job.id, profile: p })}
-                                  className="w-full text-left px-3 py-2 hover:bg-primary hover:text-white transition-colors flex items-center justify-between cursor-pointer"
-                                >
-                                  <span>{p.name}</span>
-                                </button>
-                              ))}
-                            </div>
+                            {openYoutubeDropdown === job.id && (
+                              <div className="absolute right-0 bottom-full mb-1 w-48 bg-surface border border-border rounded-xl shadow-xl z-50 overflow-hidden font-mono text-xs">
+                                <div className="px-3 py-2 bg-background border-b border-border text-[9px] uppercase tracking-widest text-muted-foreground">Escolha o Canal:</div>
+                                {connectedProfiles.map((p) => (
+                                  <button
+                                    key={p.name}
+                                    type="button"
+                                    onClick={() => { publishMutation.mutate({ jobId: job.id, profile: p }); setOpenYoutubeDropdown(null); }}
+                                    className="w-full text-left px-3 py-2 hover:bg-primary hover:text-white transition-colors flex items-center justify-between cursor-pointer"
+                                  >
+                                    <span>{p.name}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         );
                       }
@@ -1794,28 +1799,31 @@ function Index() {
 
                       if (tiktokProfiles.length > 0) {
                         return (
-                          <div className="relative group inline-block text-left">
+                          <div className="relative inline-block text-left">
                             <button
                               type="button"
                               disabled={publishTiktokMutation.isPending}
                               className="btn btn-tiktok"
+                              onClick={() => { setOpenTiktokDropdown(openTiktokDropdown === job.id ? null : job.id); setOpenYoutubeDropdown(null); }}
                             >
                               <svg viewBox="0 0 24 24" className="size-3 fill-current"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05A6.34 6.34 0 003.15 15.3a6.34 6.34 0 006.34 6.35 6.34 6.34 0 006.34-6.35V9.01a8.27 8.27 0 004.85 1.56V7.12a4.85 4.85 0 01-1.09-.43z"/></svg>
                               {publishTiktokMutation.isPending ? "Subindo..." : "TikTok ▾"}
                             </button>
-                            <div className="absolute right-0 bottom-full mb-1 w-48 bg-surface border border-border rounded-xl shadow-xl hidden group-hover:block hover:block z-50 overflow-hidden font-mono text-xs">
-                              <div className="px-3 py-2 bg-background border-b border-border text-[9px] uppercase tracking-widest text-muted-foreground">Escolha o Perfil:</div>
-                              {tiktokProfiles.map((p) => (
-                                <button
-                                  key={p.name}
-                                  type="button"
-                                  onClick={() => publishTiktokMutation.mutate({ jobId: job.id, profile: p })}
-                                  className="w-full text-left px-3 py-2 hover:bg-primary hover:text-white transition-colors flex items-center justify-between cursor-pointer"
-                                >
-                                  <span>{p.name}</span>
-                                </button>
-                              ))}
-                            </div>
+                            {openTiktokDropdown === job.id && (
+                              <div className="absolute right-0 bottom-full mb-1 w-48 bg-surface border border-border rounded-xl shadow-xl z-50 overflow-hidden font-mono text-xs">
+                                <div className="px-3 py-2 bg-background border-b border-border text-[9px] uppercase tracking-widest text-muted-foreground">Escolha o Perfil:</div>
+                                {tiktokProfiles.map((p) => (
+                                  <button
+                                    key={p.name}
+                                    type="button"
+                                    onClick={() => { publishTiktokMutation.mutate({ jobId: job.id, profile: p }); setOpenTiktokDropdown(null); }}
+                                    className="w-full text-left px-3 py-2 hover:bg-primary hover:text-white transition-colors flex items-center justify-between cursor-pointer"
+                                  >
+                                    <span>{p.name}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         );
                       }
