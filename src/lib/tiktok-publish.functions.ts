@@ -6,6 +6,7 @@ const admin = workerSupabase as any;
 
 const PublishTiktokJobInput = z.object({
   jobId: z.string().min(1),
+  clipIndex: z.number().optional(),
   tiktokConfig: z.object({
     target_platform: z.literal("tiktok"),
     tiktok_session_cookie: z.string().optional().default(""),
@@ -17,7 +18,7 @@ const PublishTiktokJobInput = z.object({
 export const publishJobToTiktok = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => PublishTiktokJobInput.parse(data))
   .handler(async ({ data }) => {
-    const { jobId, tiktokConfig } = data;
+    const { jobId, clipIndex, tiktokConfig } = data;
 
     try {
       // Fetch the current job
@@ -50,11 +51,12 @@ export const publishJobToTiktok = createServerFn({ method: "POST" })
       }
 
       // Update payload to request publish
+      const instructionsObj = { ...tiktokConfig, clip_index: clipIndex };
       const updatePayload = {
         status: "published_requested",
         updated_at: new Date().toISOString(),
         error_message: null,
-        instructions: JSON.stringify(tiktokConfig),
+        instructions: JSON.stringify(instructionsObj),
       };
 
       const { error: updateError } = await admin

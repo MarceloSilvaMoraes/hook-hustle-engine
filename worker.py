@@ -327,7 +327,7 @@ def render_clip(source_path: Path, clip: dict, output_dir: Path) -> Path:
 
 
 
-def publish_tiktok_flow(files_to_publish: list[Path], clip_items: list[dict], tiktok_config: dict, job_id: str) -> None:
+def publish_tiktok_flow(files_to_publish: list[Path], clip_items: list[dict], tiktok_config: dict, job_id: str, clip_index: int | None = None) -> None:
     import webbrowser
     
     print("\nOpening TikTok Creator Studio upload page...")
@@ -335,7 +335,10 @@ def publish_tiktok_flow(files_to_publish: list[Path], clip_items: list[dict], ti
     
     # Build a nice caption text with hashtags to copy to clipboard
     caption_lines = []
-    for i, clip in enumerate(clip_items):
+    clips_to_process = [clip_items[clip_index]] if (clip_index is not None and clip_index < len(clip_items)) else clip_items
+    
+    for i, clip in enumerate(clips_to_process):
+        idx = clip_index if clip_index is not None else i
         hook = (clip.get("hookQuote") or "").strip()
         title = (clip.get("title") or "").strip()
         
@@ -350,7 +353,7 @@ def publish_tiktok_flow(files_to_publish: list[Path], clip_items: list[dict], ti
         caption_lines.append(caption)
         
         # Print caption to terminal
-        print(f"\n[LEGENDAS DO CLIPE {i+1}] (A primeira foi copiada automaticamente):")
+        print(f"\n[LEGENDAS DO CLIPE {idx+1}] (A primeira foi copiada automaticamente):")
         print(caption)
         print("-" * 45)
         
@@ -361,29 +364,40 @@ def publish_tiktok_flow(files_to_publish: list[Path], clip_items: list[dict], ti
             # Copy via Windows clip command
             process = subprocess.Popen('clip', stdin=subprocess.PIPE, shell=True)
             process.communicate(input=first_caption.encode('utf-8'))
-            print("Legenda do clipe 1 copiada para a area de transferencia!")
+            print("Legenda do clipe copiada para a area de transferencia!")
         except Exception as clip_err:
             print("Failed to copy to clipboard:", clip_err)
 
-    # Open the first file's folder and select the file
+    # Open the file's folder and select the file
     if files_to_publish:
-        first_file = files_to_publish[0]
-        if first_file.exists():
-            try:
-                print(f"Revealing file in Explorer: {first_file}")
-                subprocess.run(["explorer.exe", "/select,", str(first_file)])
-            except Exception as explorer_err:
-                print("Failed to open Explorer:", explorer_err)
+        file_idx = clip_index if (clip_index is not None and clip_index < len(files_to_publish)) else 0
+        if file_idx is not None and file_idx < len(files_to_publish):
+            first_file = files_to_publish[file_idx]
+            if first_file and first_file.exists():
+                try:
+                    print(f"Revealing file in Explorer: {first_file}")
+                    subprocess.run(["explorer.exe", "/select,", str(first_file)])
+                except Exception as explorer_err:
+                    print("Failed to open Explorer:", explorer_err)
+
+    # Update clip_items
+    tiktok_profile_name = tiktok_config.get('tiktok_profile_name', 'TikTok')
+    if clip_index is not None and clip_index < len(clip_items):
+        clip_items[clip_index]["tiktok_profile"] = tiktok_profile_name
+    else:
+        for clip in clip_items:
+            clip["tiktok_profile"] = tiktok_profile_name
 
     # Update job to completed status with a message showing it was sent to TikTok
-    original_paths = " | ".join(str(f) for f in files_to_publish)
-    new_output = f"{original_paths} | TikTok: {tiktok_config.get('tiktok_profile_name', 'TikTok')} (Aguardando upload no Creator Studio. Legenda copiada!)"
+    original_paths = " | ".join(str(f) for f in files_to_publish if f)
+    new_output = f"{original_paths} | TikTok: {tiktok_profile_name} (Aguardando upload no Creator Studio. Legenda copiada!)"
     
     update_job(job_id, {
         "status": "completed",
         "output_path": new_output,
         "completed_at": utc_now_iso(),
         "error_message": None,
+        "clip_items": clip_items,
     })
     print(f"TikTok publish flow for job {job_id} handled successfully.\n")
 
@@ -407,6 +421,7 @@ def process_render_job(job: dict) -> None:
         update_job(job_id, {"output_path": progress_text})
         
         rendered = render_clip(video_file, clip, OUTPUT_DIR)
+        clip["local_path"] = str(rendered)  # Save the rendered local path
         rendered_files.append(rendered)
 
     # Check if instructions contain TikTok configuration
@@ -449,21 +464,26 @@ def process_render_job(job: dict) -> None:
                     
                     clip = clip_items[i]
                     youtube_url = upload_clip_to_youtube(rendered, clip, job)
+                    clip["youtube_url"] = youtube_url  # Save the uploaded youtube url
                     youtube_links.append(youtube_url)
                     print(f"Published to YouTube: {youtube_url}")
                 except Exception as upload_exc:
                     print("YouTube upload failed:", upload_exc)
 
     rendered_files_strs = [str(f) for f in rendered_files]
-    output_paths = " | ".join(rendered_files_strs) if rendered_files_strs else str(OUTPUT_DIR)
-    if youtube_links:
-        output_paths = f"{output_paths} | YouTube: {' | '.join(youtube_links)}"
+    original_paths = " | ".join(rendered_files_strs) if rendered_files_strs else str(OUTPUT_DIR)
+    
+    all_yt_links = [clip["youtube_url"] for clip in clip_items if clip.get("youtube_url")]
+    output_paths = original_paths
+    if all_yt_links:
+        output_paths = f"{original_paths} | YouTube: {' | '.join(all_yt_links)}"
     
     update_job(job_id, {
         "status": "done",
         "output_path": output_paths,
         "completed_at": utc_now_iso(),
         "error_message": None,
+        "clip_items": clip_items,
     })
     print(f"Render job {job_id} completed. Files: {len(rendered_files)}")
 
@@ -477,11 +497,13 @@ def process_publish_job(job: dict) -> None:
     is_tiktok = False
     tiktok_config = {}
     custom_refresh_token = None
+    clip_index = None
 
     if instructions_str and instructions_str.strip().startswith("{"):
         try:
             config = json.loads(instructions_str)
             if isinstance(config, dict):
+                clip_index = config.get("clip_index")
                 if config.get("target_platform") == "tiktok":
                     is_tiktok = True
                     tiktok_config = config
@@ -490,22 +512,28 @@ def process_publish_job(job: dict) -> None:
         except Exception as e:
             print("Error parsing instructions JSON:", e)
 
-    # Get the output files to publish
-    output_path = job.get("output_path", "")
-    if not output_path:
-        raise RuntimeError("Job has no output path to publish")
-
-    # Extract local file paths (before YouTube links or progress markers)
-    files_to_publish = []
-    for part in output_path.split(" | "):
-        part_str = part.strip()
-        if not part_str.startswith("YouTube:") and not part_str.startswith("Progress:") and not part_str.startswith("TikTok:") and part_str:
-            files_to_publish.append(Path(part_str))
-
     clip_items = job.get("clip_items") or []
 
+    # Get the output files to publish (try clip_items local paths first, fallback to output_path)
+    files_to_publish = []
+    for clip in clip_items:
+        local_path_str = clip.get("local_path")
+        if local_path_str:
+            files_to_publish.append(Path(local_path_str))
+        else:
+            files_to_publish.append(None)
+
+    # Fallback to output_path parsing if no local_paths found
+    if not any(files_to_publish):
+        files_to_publish = []
+        output_path = job.get("output_path", "")
+        for part in output_path.split(" | "):
+            part_str = part.strip()
+            if not part_str.startswith("YouTube:") and not part_str.startswith("Progress:") and not part_str.startswith("TikTok:") and part_str:
+                files_to_publish.append(Path(part_str))
+
     if is_tiktok:
-        publish_tiktok_flow(files_to_publish, clip_items, tiktok_config, job_id)
+        publish_tiktok_flow(files_to_publish, clip_items, tiktok_config, job_id, clip_index)
         return
 
     # Otherwise it's YouTube
@@ -517,10 +545,13 @@ def process_publish_job(job: dict) -> None:
         )
 
     youtube_links = []
-    original_paths = " | ".join(str(f) for f in files_to_publish)
+    original_paths = " | ".join(str(f) for f in files_to_publish if f)
 
     for i, file_path in enumerate(files_to_publish):
-        if file_path.exists() and i < len(clip_items):
+        if clip_index is not None and i != clip_index:
+            continue
+
+        if file_path and file_path.exists() and i < len(clip_items):
             try:
                 upload_progress = f"Progress: Enviando clipe {i+1} de {len(files_to_publish)} para o YouTube..."
                 print(upload_progress)
@@ -528,21 +559,25 @@ def process_publish_job(job: dict) -> None:
                 
                 clip = clip_items[i]
                 youtube_url = upload_clip_to_youtube(file_path, clip, job)
+                clip["youtube_url"] = youtube_url
                 youtube_links.append(youtube_url)
                 print(f"Published to YouTube: {youtube_url}")
             except Exception as upload_exc:
                 print(f"YouTube upload failed for {file_path}: {upload_exc}")
                 raise
 
+    # Reconstruct output_path YouTube links from all clip_items that have a youtube_url
+    all_yt_links = [clip["youtube_url"] for clip in clip_items if clip.get("youtube_url")]
     new_output = original_paths
-    if youtube_links:
-        new_output = f"{original_paths} | YouTube: {' | '.join(youtube_links)}"
-    
+    if all_yt_links:
+        new_output = f"{original_paths} | YouTube: {' | '.join(all_yt_links)}"
+
     update_job(job_id, {
         "status": "completed",
         "output_path": new_output,
         "completed_at": utc_now_iso(),
         "error_message": None,
+        "clip_items": clip_items,
     })
     print(f"Publish job {job_id} completed. YouTube links: {len(youtube_links)}")
 

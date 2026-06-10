@@ -6,6 +6,7 @@ const admin = workerSupabase as any;
 
 const PublishJobInput = z.object({
   jobId: z.string().min(1),
+  clipIndex: z.number().optional(),
   youtubeConfig: z.object({
     youtube_refresh_token: z.string(),
     privacy_status: z.string(),
@@ -17,7 +18,7 @@ const PublishJobInput = z.object({
 export const publishJobToYoutube = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => PublishJobInput.parse(data))
   .handler(async ({ data }) => {
-    const { jobId, youtubeConfig } = data;
+    const { jobId, clipIndex, youtubeConfig } = data;
 
     try {
       // Fetch the current job
@@ -49,42 +50,42 @@ export const publishJobToYoutube = createServerFn({ method: "POST" })
         };
       }
 
-      // Check if output has YouTube links
-      const outputPath = jobData.output_path || "";
-      if (!outputPath.includes("youtube.com")) {
-        const updatePayload: any = {
-          status: "published_requested",
-          updated_at: new Date().toISOString(),
-          error_message: null,
-        };
-
-        if (youtubeConfig) {
-          updatePayload.instructions = JSON.stringify(youtubeConfig);
-        }
-
-        const { error: updateError } = await admin
-          .from("render_jobs")
-          .update(updatePayload)
-          .eq("id", jobId);
-
-        if (updateError) {
-          return {
-            ok: false as const,
-            error: "Falha ao registrar solicitação de publicação.",
-          };
-        }
-
+      // If clipIndex is specified, check if that specific clip was already published
+      const clipItems = Array.isArray(jobData.clip_items) ? jobData.clip_items : [];
+      if (clipIndex !== undefined && clipItems[clipIndex] && (clipItems[clipIndex] as any).youtube_url) {
         return {
           ok: true as const,
-          message: "Solicitação de publicação registrada. O worker irá processar em breve.",
+          message: "Este clipe já foi publicado no YouTube.",
+          youtubeUrl: (clipItems[clipIndex] as any).youtube_url,
         };
       }
 
-      // Already has YouTube links
+      const instructionsObj = youtubeConfig 
+        ? { ...youtubeConfig, clip_index: clipIndex } 
+        : { clip_index: clipIndex };
+
+      const updatePayload: any = {
+        status: "published_requested",
+        updated_at: new Date().toISOString(),
+        error_message: null,
+        instructions: JSON.stringify(instructionsObj),
+      };
+
+      const { error: updateError } = await admin
+        .from("render_jobs")
+        .update(updatePayload)
+        .eq("id", jobId);
+
+      if (updateError) {
+        return {
+          ok: false as const,
+          error: "Falha ao registrar solicitação de publicação.",
+        };
+      }
+
       return {
         ok: true as const,
-        message: "Job já foi publicado no YouTube.",
-        youtubeLinks: outputPath.split(" | ").filter((link: string) => link.includes("youtube.com")),
+        message: "Solicitação de publicação registrada. O worker irá processar em breve.",
       };
     } catch (err) {
       return {

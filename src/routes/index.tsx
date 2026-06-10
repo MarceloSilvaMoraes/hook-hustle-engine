@@ -299,7 +299,7 @@ function Index() {
   });
 
   const publishMutation = useMutation({
-    mutationFn: async ({ jobId, profile }: { jobId: string; profile?: YoutubeProfile }) => {
+    mutationFn: async ({ jobId, clipIndex, profile }: { jobId: string; clipIndex?: number; profile?: YoutubeProfile }) => {
       let youtubeConfig;
       if (profile && profile.refreshToken) {
         youtubeConfig = {
@@ -309,7 +309,7 @@ function Index() {
           default_tags: profile.defaultTags || "",
         };
       }
-      const result = await publish({ data: { jobId, youtubeConfig } });
+      const result = await publish({ data: { jobId, clipIndex, youtubeConfig } });
       if (!result.ok) {
         throw new Error(result.error || "Falha ao publicar no YouTube.");
       }
@@ -323,14 +323,14 @@ function Index() {
   });
 
   const publishTiktokMutation = useMutation({
-    mutationFn: async ({ jobId, profile }: { jobId: string; profile: TikTokProfile }) => {
+    mutationFn: async ({ jobId, clipIndex, profile }: { jobId: string; clipIndex?: number; profile: TikTokProfile }) => {
       const tiktokConfig = {
         target_platform: "tiktok" as const,
         tiktok_session_cookie: profile.sessionCookie || "",
         tiktok_profile_name: profile.name,
         default_hashtags: profile.defaultHashtags || "",
       };
-      const result = await publishTiktok({ data: { jobId, tiktokConfig } });
+      const result = await publishTiktok({ data: { jobId, clipIndex, tiktokConfig } });
       if (!result.ok) {
         throw new Error(result.error || "Falha ao publicar no TikTok.");
       }
@@ -1657,7 +1657,7 @@ function Index() {
                       <div className="text-xs text-muted-foreground mt-0.5 font-mono">
                         {job.platform} · {job.render_format} · Out: <span className="text-foreground/80 break-all">{job.output_path || "N/A"}</span>
                       </div>
-                      {jobYoutubeLinks.length > 0 && (
+                      {jobYoutubeLinks.length > 0 && clipItems.length === 0 && (
                         <div className="mt-2.5 flex flex-wrap gap-1.5 items-center">
                           <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest mr-1">YouTube:</span>
                           {jobYoutubeLinks.map((link, idx) => (
@@ -1675,7 +1675,7 @@ function Index() {
                         </div>
                       )}
 
-                      {extractTikTokPublishInfo(job.output_path) && (
+                      {extractTikTokPublishInfo(job.output_path) && clipItems.length === 0 && (
                         <div className="mt-2.5 flex flex-wrap gap-1.5 items-center">
                           <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest mr-1">TikTok:</span>
                           <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-pink-500/10 border border-pink-500/25 text-[11px] font-mono text-pink-400 font-semibold">
@@ -1685,6 +1685,132 @@ function Index() {
                         </div>
                       )}
 
+                      {/* Individual clip actions */}
+                      {clipItems.length > 0 && (
+                        <div className="mt-4 border-t border-border/30 pt-3 space-y-2">
+                          <span className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground block mb-2">
+                            PUBLICAR CLIPES INDIVIDUALMENTE:
+                          </span>
+                          <div className="grid gap-2 grid-cols-1 xl:grid-cols-2">
+                            {clipItems.map((clip, clipIdx) => {
+                              const ytUrl = clip.youtube_url;
+                              const ttProfileName = clip.tiktok_profile;
+                              const connectedProfiles = youtubeProfiles.filter(p => p.refreshToken);
+                              
+                              return (
+                                <div key={clipIdx} className="bg-background/30 border border-border/40 rounded-xl p-3 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-mono text-[9px] font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded">
+                                        CLIPE {clipIdx + 1}
+                                      </span>
+                                      <span className="font-mono text-[9px] text-muted-foreground">
+                                        {clip.startTimestamp} → {clip.endTimestamp}
+                                      </span>
+                                    </div>
+                                    <div className="font-semibold text-xs text-foreground truncate mt-1">
+                                      {clip.title}
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="flex flex-wrap gap-1.5 shrink-0">
+                                    {/* YouTube Action */}
+                                    {ytUrl ? (
+                                      <a
+                                        href={ytUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-[10px] font-mono text-red-400 font-semibold cursor-pointer transition-colors"
+                                      >
+                                        <svg viewBox="0 0 24 24" className="size-2.5 fill-current"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                                        YouTube ↗
+                                      </a>
+                                    ) : isJobReadyToPublish(job.status) && connectedProfiles.length > 0 ? (
+                                      <div className="relative inline-block text-left">
+                                        <button
+                                          type="button"
+                                          disabled={publishMutation.isPending}
+                                          className="btn btn-youtube px-2 py-1 text-[10px] rounded flex items-center gap-1 font-mono cursor-pointer"
+                                          onClick={() => {
+                                            const key = `${job.id}-${clipIdx}-yt`;
+                                            setOpenYoutubeDropdown(openYoutubeDropdown === key ? null : key);
+                                            setOpenTiktokDropdown(null);
+                                          }}
+                                        >
+                                          YouTube ▾
+                                        </button>
+                                        {openYoutubeDropdown === `${job.id}-${clipIdx}-yt` && (
+                                          <div className="absolute left-0 bottom-full mb-1 w-40 bg-surface border border-border rounded-xl shadow-xl z-50 overflow-hidden font-mono text-[10px]">
+                                            <div className="px-2 py-1 bg-background border-b border-border text-[8px] uppercase tracking-widest text-muted-foreground">Canal:</div>
+                                            {connectedProfiles.map((p) => (
+                                              <button
+                                                key={p.name}
+                                                type="button"
+                                                onClick={() => {
+                                                  publishMutation.mutate({ jobId: job.id, clipIndex: clipIdx, profile: p });
+                                                  setOpenYoutubeDropdown(null);
+                                                }}
+                                                className="w-full text-left px-2 py-1.5 hover:bg-primary hover:text-white transition-colors flex items-center justify-between cursor-pointer"
+                                              >
+                                                <span>{p.name}</span>
+                                              </button>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <span className="text-[10px] text-muted-foreground/30 font-mono py-1">YouTube N/A</span>
+                                    )}
+
+                                    {/* TikTok Action */}
+                                    {ttProfileName ? (
+                                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-pink-500/10 border border-pink-500/20 text-[10px] font-mono text-pink-400 font-semibold">
+                                        <svg viewBox="0 0 24 24" className="size-2.5 fill-current"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05A6.34 6.34 0 003.15 15.3a6.34 6.34 0 006.34 6.35 6.34 6.34 0 006.34-6.35V9.01a8.27 8.27 0 004.85 1.56V7.12a4.85 4.85 0 01-1.09-.43z"/></svg>
+                                        TikTok ({ttProfileName})
+                                      </span>
+                                    ) : isJobReadyToPublish(job.status) && tiktokProfiles.length > 0 ? (
+                                      <div className="relative inline-block text-left">
+                                        <button
+                                          type="button"
+                                          disabled={publishTiktokMutation.isPending}
+                                          className="btn btn-tiktok px-2 py-1 text-[10px] rounded flex items-center gap-1 font-mono cursor-pointer"
+                                          onClick={() => {
+                                            const key = `${job.id}-${clipIdx}-tt`;
+                                            setOpenTiktokDropdown(openTiktokDropdown === key ? null : key);
+                                            setOpenYoutubeDropdown(null);
+                                          }}
+                                        >
+                                          TikTok ▾
+                                        </button>
+                                        {openTiktokDropdown === `${job.id}-${clipIdx}-tt` && (
+                                          <div className="absolute left-0 bottom-full mb-1 w-40 bg-surface border border-border rounded-xl shadow-xl z-50 overflow-hidden font-mono text-[10px]">
+                                            <div className="px-2 py-1 bg-background border-b border-border text-[8px] uppercase tracking-widest text-muted-foreground">Perfil:</div>
+                                            {tiktokProfiles.map((p) => (
+                                              <button
+                                                key={p.name}
+                                                type="button"
+                                                onClick={() => {
+                                                  publishTiktokMutation.mutate({ jobId: job.id, clipIndex: clipIdx, profile: p });
+                                                  setOpenTiktokDropdown(null);
+                                                }}
+                                                className="w-full text-left px-2 py-1.5 hover:bg-primary hover:text-white transition-colors flex items-center justify-between cursor-pointer"
+                                              >
+                                                <span>{p.name}</span>
+                                              </button>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <span className="text-[10px] text-muted-foreground/30 font-mono py-1">TikTok N/A</span>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                     {job.error_message && (
                       <div className="mt-1.5 text-xs text-destructive/90 font-mono bg-destructive/5 border border-destructive/10 rounded px-2 py-1 flex items-start gap-1">
                         <span className="font-bold shrink-0">Erro:</span>
@@ -1738,7 +1864,7 @@ function Index() {
                             className="btn btn-youtube"
                           >
                             <svg viewBox="0 0 24 24" className="size-3 fill-current" aria-hidden="true"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
-                            {publishMutation.isPending ? "Subindo..." : activeProfile.name}
+                            {publishMutation.isPending ? "Subindo..." : `${activeProfile.name} (Tudo)`}
                           </button>
                         );
                       }
@@ -1753,7 +1879,7 @@ function Index() {
                               onClick={() => { setOpenYoutubeDropdown(openYoutubeDropdown === job.id ? null : job.id); setOpenTiktokDropdown(null); }}
                             >
                               <svg viewBox="0 0 24 24" className="size-3 fill-current" aria-hidden="true"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
-                              {publishMutation.isPending ? "Subindo..." : "YouTube ▾"}
+                              {publishMutation.isPending ? "Subindo..." : "YouTube (Tudo) ▾"}
                             </button>
                             {openYoutubeDropdown === job.id && (
                               <div className="absolute right-0 bottom-full mb-1 w-48 bg-surface border border-border rounded-xl shadow-xl z-50 overflow-hidden font-mono text-xs">
@@ -1792,7 +1918,7 @@ function Index() {
                             style={{ animation: "ttGlow 2s ease-in-out infinite" }}
                           >
                             <svg viewBox="0 0 24 24" className="size-3 fill-current"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05A6.34 6.34 0 003.15 15.3a6.34 6.34 0 006.34 6.35 6.34 6.34 0 006.34-6.35V9.01a8.27 8.27 0 004.85 1.56V7.12a4.85 4.85 0 01-1.09-.43z"/></svg>
-                            {publishTiktokMutation.isPending ? "Subindo..." : activeTikTokProfile.name}
+                            {publishTiktokMutation.isPending ? "Subindo..." : `${activeTikTokProfile.name} (Tudo)`}
                           </button>
                         );
                       }
@@ -1807,7 +1933,7 @@ function Index() {
                               onClick={() => { setOpenTiktokDropdown(openTiktokDropdown === job.id ? null : job.id); setOpenYoutubeDropdown(null); }}
                             >
                               <svg viewBox="0 0 24 24" className="size-3 fill-current"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05A6.34 6.34 0 003.15 15.3a6.34 6.34 0 006.34 6.35 6.34 6.34 0 006.34-6.35V9.01a8.27 8.27 0 004.85 1.56V7.12a4.85 4.85 0 01-1.09-.43z"/></svg>
-                              {publishTiktokMutation.isPending ? "Subindo..." : "TikTok ▾"}
+                              {publishTiktokMutation.isPending ? "Subindo..." : "TikTok (Tudo) ▾"}
                             </button>
                             {openTiktokDropdown === job.id && (
                               <div className="absolute right-0 bottom-full mb-1 w-48 bg-surface border border-border rounded-xl shadow-xl z-50 overflow-hidden font-mono text-xs">
