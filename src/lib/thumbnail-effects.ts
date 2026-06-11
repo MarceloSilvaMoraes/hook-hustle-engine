@@ -36,7 +36,27 @@ export interface ThumbnailEnhancements {
 export function getDefaultEnhancements(): ThumbnailEnhancements {
   return {
     characterHighlights: [],
-    visualEffects: [],
+    visualEffects: [
+      // Arrow pointing to character/focal point
+      {
+        type: "arrow",
+        x: 0.5,
+        y: 0.15,
+        size: 0.15,
+        color: "#FFD700",
+        rotation: 45,
+        opacity: 0.9,
+      },
+      // Glow effect around center
+      {
+        type: "glow",
+        x: 0.5,
+        y: 0.5,
+        size: 0.25,
+        color: "#FF6B00",
+        opacity: 0.6,
+      },
+    ],
     cornerBadges: "score",
     borderStyle: "gradient",
     borderThickness: 12,
@@ -279,12 +299,20 @@ export function drawNeonBorder(
   ctx.save();
 
   ctx.shadowColor = color;
-  ctx.shadowBlur = 15;
+  ctx.shadowBlur = 30;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 0;
   ctx.strokeStyle = color;
   ctx.lineWidth = thickness;
-  ctx.globalAlpha = 0.9;
+  ctx.globalAlpha = 1;
 
   ctx.strokeRect(thickness / 2, thickness / 2, canvasWidth - thickness, canvasHeight - thickness);
+
+  // Inner glow line for extra effect
+  ctx.shadowBlur = 15;
+  ctx.lineWidth = thickness / 2;
+  ctx.globalAlpha = 0.6;
+  ctx.strokeRect(thickness, thickness, canvasWidth - thickness * 2, canvasHeight - thickness * 2);
 
   ctx.restore();
 }

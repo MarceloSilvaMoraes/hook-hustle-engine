@@ -33,17 +33,38 @@ interface ThumbnailCanvasProps {
 }
 
 export const COLOR_SCHEMES: Record<string, { colors: [string, string]; emoji: string; label: string }> = {
-  humor: { colors: ["#FF6B00", "#FFD700"], emoji: "😂", label: "Humor" },
-  controversy: { colors: ["#CC0000", "#FF4444"], emoji: "🤯", label: "Controvérsia" },
-  emotional: { colors: ["#4C1D95", "#7C3AED"], emoji: "❤️", label: "Emocional" },
-  hook: { colors: ["#1D4ED8", "#06B6D4"], emoji: "👀", label: "Gancho" },
-  high_value: { colors: ["#065F46", "#10B981"], emoji: "💎", label: "Alto Valor" },
-  cliffhanger: { colors: ["#92400E", "#F59E0B"], emoji: "🔥", label: "Suspense" },
+  humor: { colors: ["#FF4500", "#FFD700"], emoji: "😂", label: "Humor" }, // More saturated orange
+  controversy: { colors: ["#FF0000", "#FF6600"], emoji: "🤯", label: "Controvérsia" }, // Pure red to orange
+  emotional: { colors: ["#6B0066", "#FF00FF"], emoji: "❤️", label: "Emocional" }, // Deep purple to magenta
+  hook: { colors: ["#0066FF", "#00CCFF"], emoji: "👀", label: "Gancho" }, // Bright blue to cyan
+  high_value: { colors: ["#00CC00", "#00FF00"], emoji: "💎", label: "Alto Valor" }, // Lime green
+  cliffhanger: { colors: ["#FF6600", "#FFAA00"], emoji: "🔥", label: "Suspense" }, // Orange to amber
 };
 
 export function getDefaultConfig(clip: ViralClip): ThumbnailConfig {
   const mainTrigger = clip.triggers[0] || "hook";
   const scheme = COLOR_SCHEMES[mainTrigger] ? mainTrigger : "hook";
+  
+  // Determine badge based on score
+  const determineBadge = (score: number) => {
+    if (score >= 95) return "trending" as const;
+    if (score >= 85) return "hot" as const;
+    if (score >= 75) return "new" as const;
+    return "score" as const;
+  };
+
+  // Add character highlight in center-right area (typical focal point)
+  const characterHighlights = [
+    {
+      x: 0.65, // Right side where character usually is
+      y: 0.4,
+      width: 0.3,
+      height: 0.5,
+      intensity: "high" as const, // High intensity for main character
+    },
+  ];
+
+  const enhancements = getDefaultEnhancements();
   
   return {
     titleText: clip.title,
@@ -52,7 +73,15 @@ export function getDefaultConfig(clip: ViralClip): ThumbnailConfig {
     emoji: COLOR_SCHEMES[scheme]?.emoji || "👀",
     showScore: true,
     textPosition: "center",
-    enhancements: getDefaultEnhancements(),
+    enhancements: {
+      ...enhancements,
+      characterHighlights,
+      cornerBadges: determineBadge(clip.score),
+      borderStyle: "neon" as const, // Neon border for viral effect
+      borderThickness: 16, // Thick border for impact
+      useGlowEffect: true,
+      characterBoxColor: "#FFD700", // Gold for character highlights
+    },
     useViralEffects: true,
   };
 }
@@ -144,19 +173,29 @@ export function ThumbnailCanvas({ clip, config, onExport, width = 320, youtubeTh
       // 4. Large Decorative Emoji (Right side)
       if (currentConfig.emoji) {
         ctx.save();
-        ctx.font = "240px 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif";
+        ctx.font = "280px 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif"; // Increased from 240
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.translate(1000, 420);
+        ctx.translate(1020, 420);
         ctx.rotate((15 * Math.PI) / 180);
-        ctx.globalAlpha = 0.85;
+        ctx.globalAlpha = 0.95; // Increased from 0.85
         
-        ctx.shadowColor = "rgba(0,0,0,0.5)";
-        ctx.shadowBlur = 30;
-        ctx.shadowOffsetX = 10;
-        ctx.shadowOffsetY = 10;
+        // Multiple shadow layers for more glow
+        ctx.shadowColor = "rgba(0,0,0,0.6)";
+        ctx.shadowBlur = 40;
+        ctx.shadowOffsetX = 15;
+        ctx.shadowOffsetY = 15;
         
         ctx.fillText(currentConfig.emoji, 0, 0);
+        
+        // Add color glow
+        ctx.shadowColor = schemeInfo.colors[0];
+        ctx.shadowBlur = 30;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
+        ctx.globalAlpha = 0.5;
+        ctx.fillText(currentConfig.emoji, 0, 0);
+        
         ctx.restore();
       }
 
@@ -215,24 +254,24 @@ export function ThumbnailCanvas({ clip, config, onExport, width = 320, youtubeTh
       ctx.textAlign = "left";
       ctx.textBaseline = "top";
       
-      const titleFontSize = 75;
+      const titleFontSize = 95; // Increased from 75
       ctx.font = `900 ${titleFontSize}px 'Outfit', 'Montserrat', 'Inter', 'Segoe UI', sans-serif`;
       
-      const maxTextWidth = 780; // Keep space for emoji/score on the right
-      const titleLineHeight = titleFontSize * 1.15;
+      const maxTextWidth = 750; // Keep space for emoji/score on the right
+      const titleLineHeight = titleFontSize * 1.1;
       const titleLines = wrapText(ctx, currentConfig.titleText.toUpperCase(), maxTextWidth);
       
-      const subFontSize = 42;
+      const subFontSize = 50; // Increased from 42
       ctx.font = `italic 700 ${subFontSize}px 'Outfit', 'Montserrat', 'Inter', 'Segoe UI', sans-serif`;
-      const subLineHeight = subFontSize * 1.25;
+      const subLineHeight = subFontSize * 1.2;
       const subLines = currentConfig.subText ? wrapText(ctx, `"${currentConfig.subText}"`, maxTextWidth) : [];
       
-      const textGap = 40;
+      const textGap = 30;
       const totalTitleHeight = titleLines.length * titleLineHeight;
       const totalSubHeight = subLines.length > 0 ? (subLines.length * subLineHeight) + textGap : 0;
       const totalTextHeight = totalTitleHeight + totalSubHeight;
       
-      let startY = 120; // Default top
+      let startY = 100; // Default top
       if (currentConfig.textPosition === "center") {
         startY = (720 - totalTextHeight) / 2;
       } else if (currentConfig.textPosition === "bottom") {
@@ -243,18 +282,27 @@ export function ThumbnailCanvas({ clip, config, onExport, width = 320, youtubeTh
       titleLines.forEach((line, idx) => {
         const lineY = startY + idx * titleLineHeight;
         
-        ctx.shadowColor = "rgba(0, 0, 0, 0.9)";
-        ctx.shadowBlur = 15;
-        ctx.shadowOffsetX = 4;
-        ctx.shadowOffsetY = 6;
+        ctx.shadowColor = "rgba(0, 0, 0, 0.95)";
+        ctx.shadowBlur = 20;
+        ctx.shadowOffsetX = 5;
+        ctx.shadowOffsetY = 8;
         
         ctx.strokeStyle = "#000000";
-        ctx.lineWidth = 14;
+        ctx.lineWidth = 18; // Thicker outline for more impact
         ctx.font = `900 ${titleFontSize}px 'Outfit', 'Montserrat', 'Inter', 'Segoe UI', sans-serif`;
-        ctx.strokeText(line, 80, lineY);
+        ctx.strokeText(line, 60, lineY);
         
+        // Main white text
         ctx.fillStyle = "#ffffff";
-        ctx.fillText(line, 80, lineY);
+        ctx.fillText(line, 60, lineY);
+        
+        // Optional: Add color highlight/glow to first line
+        if (idx === 0) {
+          ctx.fillStyle = schemeInfo.colors[1];
+          ctx.globalAlpha = 0.3;
+          ctx.fillText(line, 62, lineY + 2);
+          ctx.globalAlpha = 1;
+        }
       });
       
       // Draw Subtitle Lines (Subtext)
@@ -264,18 +312,19 @@ export function ThumbnailCanvas({ clip, config, onExport, width = 320, youtubeTh
         subLines.forEach((line, idx) => {
           const lineY = subStartY + idx * subLineHeight;
           
-          ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
-          ctx.shadowBlur = 10;
-          ctx.shadowOffsetX = 3;
-          ctx.shadowOffsetY = 4;
+          ctx.shadowColor = "rgba(0, 0, 0, 0.9)";
+          ctx.shadowBlur = 15;
+          ctx.shadowOffsetX = 4;
+          ctx.shadowOffsetY = 6;
           
           ctx.strokeStyle = "#000000";
-          ctx.lineWidth = 10;
+          ctx.lineWidth = 12;
           ctx.font = `italic 700 ${subFontSize}px 'Outfit', 'Montserrat', 'Inter', 'Segoe UI', sans-serif`;
-          ctx.strokeText(line, 80, lineY);
+          ctx.strokeText(line, 60, lineY);
           
-          ctx.fillStyle = "#FFD700"; // Gold color for subtitle emphasis
-          ctx.fillText(line, 80, lineY);
+          // Bright yellow/gold for subtitle
+          ctx.fillStyle = "#FFFF00";
+          ctx.fillText(line, 60, lineY);
         });
       }
 
