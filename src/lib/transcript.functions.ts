@@ -1,9 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { YoutubeTranscript } from "youtube-transcript";
-import { execSync } from "child_process";
-import * as fs from "fs";
-import * as path from "path";
 
 const InputSchema = z.object({
   url: z.string().url().max(500),
@@ -78,6 +75,10 @@ async function fetchTranscriptWithFallback(ytId: string) {
  */
 async function extractCaptionsWithYtDlp(ytId: string): Promise<Array<{ offset: number; text: string }>> {
   try {
+    const { execSync } = await import("child_process");
+    const fs = await import("fs");
+    const path = await import("path");
+
     const tempDir = path.join(process.cwd(), ".temp-captions");
     if (!fs.existsSync(tempDir)) {
       fs.mkdirSync(tempDir, { recursive: true });
@@ -97,7 +98,7 @@ async function extractCaptionsWithYtDlp(ytId: string): Promise<Array<{ offset: n
 
         // Look for VTT file
         const files = fs.readdirSync(tempDir);
-        const vttFile = files.find((f) => f.startsWith(ytId) && f.endsWith(".vtt"));
+        const vttFile = files.find((f: string) => f.startsWith(ytId) && f.endsWith(".vtt"));
 
         if (vttFile) {
           const vttPath = path.join(tempDir, vttFile);
