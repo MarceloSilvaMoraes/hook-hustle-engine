@@ -197,7 +197,7 @@ export function drawVisualEffects(
 }
 
 /**
- * Draw an arrow pointing in a direction
+ * Draw an arrow pointing in a direction (MASSIVE and visible)
  */
 function drawArrow(
   ctx: CanvasRenderingContext2D,
@@ -207,29 +207,35 @@ function drawArrow(
   color: string,
   thickness: number
 ) {
-  const headlen = size * 0.4;
-  const angle = 0; // pointing right
+  const headlen = size * 0.5;
 
-  // Arrow line
-  const toX = fromX + size * Math.cos(angle);
-  const toY = fromY + size * Math.sin(angle);
+  // Arrow line (pointing right then rotated)
+  const toX = fromX + size * Math.cos(0);
+  const toY = fromY + size * Math.sin(0);
 
+  // Draw line with extra glow
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 20;
+  
   ctx.beginPath();
   ctx.moveTo(fromX, fromY);
   ctx.lineTo(toX, toY);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = thickness + 2;
   ctx.stroke();
 
-  // Arrow head
+  // Arrow head (filled triangle)
+  ctx.fillStyle = color;
   ctx.beginPath();
   ctx.moveTo(toX, toY);
-  ctx.lineTo(toX - headlen * Math.cos(angle - Math.PI / 6), toY - headlen * Math.sin(angle - Math.PI / 6));
-  ctx.lineTo(toX - headlen * Math.cos(angle + Math.PI / 6), toY - headlen * Math.sin(angle + Math.PI / 6));
+  ctx.lineTo(toX - headlen * Math.cos(0 - Math.PI / 6), toY - headlen * Math.sin(0 - Math.PI / 6));
+  ctx.lineTo(toX - headlen * Math.cos(0 + Math.PI / 6), toY - headlen * Math.sin(0 + Math.PI / 6));
   ctx.closePath();
   ctx.fill();
 }
 
 /**
- * Draw a star shape
+ * Draw a star shape (BRIGHT and bold)
  */
 function drawStar(
   ctx: CanvasRenderingContext2D,
@@ -243,6 +249,10 @@ function drawStar(
 ) {
   let step = Math.PI / spikes;
 
+  // Glow effect
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 25;
+
   ctx.beginPath();
   ctx.moveTo(cx, cy - outerRadius);
 
@@ -254,12 +264,19 @@ function drawStar(
   }
 
   ctx.closePath();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = thickness + 1;
   ctx.stroke();
+  
+  // Fill star with semi-transparent color
+  ctx.fillStyle = color;
+  ctx.globalAlpha = 0.3;
   ctx.fill();
+  ctx.globalAlpha = 1;
 }
 
 /**
- * Draw explosion effect
+ * Draw explosion effect (MASSIVE)
  */
 function drawExplosion(
   ctx: CanvasRenderingContext2D,
@@ -269,21 +286,35 @@ function drawExplosion(
   color: string,
   thickness: number
 ) {
-  const rays = 12;
-  const rayLength = size;
+  const rays = 16; // More rays
+  const rayLength = size * 1.5; // Longer rays
+
+  // Outer glow
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 30;
 
   for (let i = 0; i < rays; i++) {
     const angle = (i / rays) * Math.PI * 2;
-    const x1 = x + Math.cos(angle) * (size * 0.3);
-    const y1 = y + Math.sin(angle) * (size * 0.3);
+    const x1 = x + Math.cos(angle) * (size * 0.4);
+    const y1 = y + Math.sin(angle) * (size * 0.4);
     const x2 = x + Math.cos(angle) * rayLength;
     const y2 = y + Math.sin(angle) * rayLength;
 
     ctx.beginPath();
     ctx.moveTo(x1, y1);
     ctx.lineTo(x2, y2);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = thickness + 1;
     ctx.stroke();
   }
+
+  // Center glow circle
+  ctx.fillStyle = color;
+  ctx.globalAlpha = 0.6;
+  ctx.beginPath();
+  ctx.arc(x, y, size * 0.3, 0, 2 * Math.PI);
+  ctx.fill();
+  ctx.globalAlpha = 1;
 }
 
 /**
