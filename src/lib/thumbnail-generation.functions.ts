@@ -4,14 +4,20 @@ import sharp from "sharp";
 import { execSync } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
+import { workerSupabase } from "./worker-supabase.server";
 
 /**
  * Sistema Automatizado de Geração de Thumbnails Profissionais
  * Arquitetura: Captura -> Remove Fundo -> Gera Texto -> Compõe Final
+ * 
+ * Suporta:
+ * - Arquivos locais (path)
+ * - URLs remotas (https://...) - faz download automático
+ * - Supabase Storage URLs
  */
 
 const ThumbnailGenerationSchema = z.object({
-  videoPath: z.string().min(1),
+  videoPath: z.string().min(1), // Local path OU URL remota
   clipTitle: z.string().min(1).max(80),
   clipHook: z.string().min(1).max(60),
   triggerType: z.enum(["humor", "controversy", "emotional", "hook", "high_value", "cliffhanger"]),
@@ -64,6 +70,53 @@ const DESIGN_PRESETS = {
     emoji: "🔥",
   },
 };
+
+/**
+ * HELPER: Fazer Download de URL e Salvar Localmente
+ * Suporta HTTP, HTTPS e URLs de Supabase Storage
+ */
+async function downloadVideoFile(videoUrl: string, outputPath: string): Promise<void> {
+  try {
+    console.log(`📥 Fazendo download: ${videoUrl.substring(0, 60)}...`);
+    const response = await fetch(videoUrl);
+    
+    if (!response.ok) {
+      throw new Error(`Falha ao baixar vídeo: HTTP ${response.status}`);
+    }
+    
+    const buffer = await response.arrayBuffer();
+    fs.writeFileSync(outputPath, Buffer.from(buffer));
+    
+    const sizeInMB = (buffer.byteLength / 1024 / 1024).toFixed(2);
+    console.log(`✅ Download completo: ${sizeInMB}MB`);
+  } catch (error) {
+    console.error("Erro ao fazer download:", error);
+    throw new Error(`Falha no download do vídeo: ${error instanceof Error ? error.message : "desconhecido"}`);
+  }
+}
+
+/**
+ * HELPER: Obter caminho local do vídeo (download se necessário)
+ * Retorna o caminho local pronto para FFmpeg processar
+ */
+async function getLocalVideoPath(videoPath: string, tempDir: string): Promise<{ localPath: string; isDownloaded: boolean }> {
+  // Se é URL (começa com http:// ou https://)
+  if (videoPath.startsWith("http://") || videoPath.startsWith("https://")) {
+    const timestamp = Date.now();
+    const randomId = Math.random().toString(36).substring(7);
+    const localPath = path.join(tempDir, `video_${timestamp}_${randomId}.mp4`);
+    
+    await downloadVideoFile(videoPath, localPath);
+    return { localPath, isDownloaded: true };
+  }
+  
+  // Se é arquivo local
+  if (fs.existsSync(videoPath)) {
+    return { localPath: videoPath, isDownloaded: false };
+  }
+  
+  throw new Error(`Vídeo não encontrado: ${videoPath}`);
+}
 
 /**
  * ETAPA 1: Extrair Frame do Vídeo (FFmpeg)
@@ -320,6 +373,7 @@ async function composeThumbnail(
 
 /**
  * API Principal: Gera Thumbnail Completa
+ * Suporta URLs e arquivos locais automaticamente
  */
 export const generateThumbnailAutomatic = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => ThumbnailGenerationSchema.parse(data))
@@ -330,13 +384,21 @@ export const generateThumbnailAutomatic = createServerFn({ method: "POST" })
     }
 
     const timestamp = Date.now();
+    let localVideoPath: string | undefined;
+    let downloadedVideoPath: string | undefined;
     const frameFile = path.join(tempDir, `frame_${timestamp}.jpg`);
     const noBackgroundFile = path.join(tempDir, `nobg_${timestamp}.png`);
     const outputFile = path.join(tempDir, `thumbnail_${timestamp}.jpg`);
 
     try {
+      // Etapa 0: Obter caminho local (download se necessário)
+      console.log("🎬 [0/4] Verificando vídeo...");
+      const { localPath, isDownloaded } = await getLocalVideoPath(data.videoPath, tempDir);
+      localVideoPath = localPath;
+      if (isDownloaded) downloadedVideoPath = localPath;
+
       console.log("🎬 [1/4] Extraindo frame do vídeo...");
-      await extractVideoFrame(data.videoPath, data.extractAtSeconds, frameFile);
+      await extractVideoFrame(localVideoPath, data.extractAtSeconds, frameFile);
 
       console.log("✂️ [2/4] Removendo fundo...");
       await removeBackground(frameFile, noBackgroundFile);
@@ -356,6 +418,9 @@ export const generateThumbnailAutomatic = createServerFn({ method: "POST" })
       [frameFile, noBackgroundFile, outputFile].forEach((file) => {
         if (fs.existsSync(file)) fs.unlinkSync(file);
       });
+      if (downloadedVideoPath && fs.existsSync(downloadedVideoPath)) {
+        fs.unlinkSync(downloadedVideoPath);
+      }
 
       return {
         success: true,
@@ -367,6 +432,9 @@ export const generateThumbnailAutomatic = createServerFn({ method: "POST" })
       [frameFile, noBackgroundFile, outputFile].forEach((file) => {
         if (fs.existsSync(file)) fs.unlinkSync(file);
       });
+      if (downloadedVideoPath && fs.existsSync(downloadedVideoPath)) {
+        fs.unlinkSync(downloadedVideoPath);
+      }
 
       console.error("Erro ao gerar thumbnail:", error);
       return {
@@ -378,6 +446,7 @@ export const generateThumbnailAutomatic = createServerFn({ method: "POST" })
 
 /**
  * Versão com API Remove.bg (alternativa ao Rembg local)
+ * Suporta URLs e arquivos locais
  */
 export const generateThumbnailWithRemoveBgApi = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => ThumbnailGenerationSchema.parse(data))
@@ -397,13 +466,21 @@ export const generateThumbnailWithRemoveBgApi = createServerFn({ method: "POST" 
     }
 
     const timestamp = Date.now();
+    let localVideoPath: string | undefined;
+    let downloadedVideoPath: string | undefined;
     const frameFile = path.join(tempDir, `frame_${timestamp}.jpg`);
     const noBackgroundFile = path.join(tempDir, `nobg_${timestamp}.png`);
     const outputFile = path.join(tempDir, `thumbnail_${timestamp}.jpg`);
 
     try {
+      // Obter caminho local (download se necessário)
+      console.log("🎬 [0/4] Verificando vídeo...");
+      const { localPath, isDownloaded } = await getLocalVideoPath(data.videoPath, tempDir);
+      localVideoPath = localPath;
+      if (isDownloaded) downloadedVideoPath = localPath;
+
       console.log("🎬 [1/4] Extraindo frame do vídeo...");
-      await extractVideoFrame(data.videoPath, data.extractAtSeconds, frameFile);
+      await extractVideoFrame(localVideoPath, data.extractAtSeconds, frameFile);
 
       console.log("✂️ [2/4] Removendo fundo via API...");
       const frameBuffer = fs.readFileSync(frameFile);
@@ -438,6 +515,9 @@ export const generateThumbnailWithRemoveBgApi = createServerFn({ method: "POST" 
       [frameFile, noBackgroundFile, outputFile].forEach((file) => {
         if (fs.existsSync(file)) fs.unlinkSync(file);
       });
+      if (downloadedVideoPath && fs.existsSync(downloadedVideoPath)) {
+        fs.unlinkSync(downloadedVideoPath);
+      }
 
       return {
         success: true,
@@ -448,6 +528,9 @@ export const generateThumbnailWithRemoveBgApi = createServerFn({ method: "POST" 
       [frameFile, noBackgroundFile, outputFile].forEach((file) => {
         if (fs.existsSync(file)) fs.unlinkSync(file);
       });
+      if (downloadedVideoPath && fs.existsSync(downloadedVideoPath)) {
+        fs.unlinkSync(downloadedVideoPath);
+      }
 
       console.error("Erro ao gerar thumbnail com API:", error);
       return {
@@ -460,6 +543,7 @@ export const generateThumbnailWithRemoveBgApi = createServerFn({ method: "POST" 
 /**
  * Versão rápida (sem remover fundo - apenas compor)
  * Use para testes ou quando o vídeo já tem fundo apropriado
+ * Suporta URLs e arquivos locais
  */
 export const generateThumbnailQuick = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => ThumbnailGenerationSchema.parse(data))
@@ -470,12 +554,20 @@ export const generateThumbnailQuick = createServerFn({ method: "POST" })
     }
 
     const timestamp = Date.now();
+    let localVideoPath: string | undefined;
+    let downloadedVideoPath: string | undefined;
     const frameFile = path.join(tempDir, `frame_${timestamp}.jpg`);
     const outputFile = path.join(tempDir, `thumbnail_quick_${timestamp}.jpg`);
 
     try {
+      // Obter caminho local (download se necessário)
+      console.log("🎬 Verificando vídeo...");
+      const { localPath, isDownloaded } = await getLocalVideoPath(data.videoPath, tempDir);
+      localVideoPath = localPath;
+      if (isDownloaded) downloadedVideoPath = localPath;
+
       console.log("🎬 Extraindo frame...");
-      await extractVideoFrame(data.videoPath, data.extractAtSeconds, frameFile);
+      await extractVideoFrame(localVideoPath, data.extractAtSeconds, frameFile);
 
       console.log("✍️ Gerando texto...");
       const textSvg = createTextSVG(data.clipTitle, data.clipHook, DESIGN_PRESETS[data.triggerType]);
@@ -513,6 +605,9 @@ export const generateThumbnailQuick = createServerFn({ method: "POST" })
       [frameFile, outputFile].forEach((file) => {
         if (fs.existsSync(file)) fs.unlinkSync(file);
       });
+      if (downloadedVideoPath && fs.existsSync(downloadedVideoPath)) {
+        fs.unlinkSync(downloadedVideoPath);
+      }
 
       return {
         success: true,
@@ -523,6 +618,9 @@ export const generateThumbnailQuick = createServerFn({ method: "POST" })
       [frameFile, outputFile].forEach((file) => {
         if (fs.existsSync(file)) fs.unlinkSync(file);
       });
+      if (downloadedVideoPath && fs.existsSync(downloadedVideoPath)) {
+        fs.unlinkSync(downloadedVideoPath);
+      }
 
       return {
         success: false,
