@@ -30,6 +30,9 @@ export function ClipCard({ clip, index, onPlay, thumbnailConfig, onThumbnailSave
   const isTop = index === 0;
   const scoreColor = clip.score >= 90 ? "border-primary" : clip.score >= 75 ? "border-primary/60" : "border-border";
 
+  // Always use default config with viral effects
+  const effectiveConfig = thumbnailConfig || getDefaultConfig(clip);
+
   const copyAll = () => {
     const text = `${clip.title}
 ${clip.startTimestamp} → ${clip.endTimestamp} (${clip.durationSeconds}s)
@@ -71,11 +74,10 @@ TRECHO: "${clip.transcriptExcerpt}"`;
       <div className="relative aspect-video w-full rounded-xl overflow-hidden mb-5 bg-zinc-950 border border-zinc-855/20 flex items-center justify-center">
         <ThumbnailCanvas
           clip={clip}
-          config={thumbnailConfig}
+          config={effectiveConfig}
           onExport={(dataUrl) => {
-            if (onThumbnailSave && !thumbnailConfig) {
-              const defaultConfig = getDefaultConfig(clip);
-              onThumbnailSave(dataUrl, defaultConfig);
+            if (onThumbnailSave) {
+              onThumbnailSave(dataUrl, effectiveConfig);
             }
           }}
           width={400}
