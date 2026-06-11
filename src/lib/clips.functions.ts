@@ -103,14 +103,26 @@ export const analyzeTranscript = createServerFn({ method: "POST" })
     const ollamaUrl = (process.env.OLLAMA_BASE_URL || process.env.VITE_OLLAMA_BASE_URL || "http://localhost:11434").trim();
     const ollamaModel = (process.env.OLLAMA_MODEL || process.env.VITE_OLLAMA_MODEL || "mistral").trim();
 
-    const aiConfig = lovableKey && !lovableKey.includes("COLOQUE_SUA_CHAVE_AQUI") && !lovableKey.includes("SEU_TOKEN_AQUI")
+    // Detectar qual IA configurar
+    const isLovableValid = lovableKey && !lovableKey.includes("COLOQUE_SUA_CHAVE_AQUI") && !lovableKey.includes("SEU_TOKEN_AQUI");
+    const isOpenAiValid = openAiKey && !openAiKey.includes("COLOQUE_SUA_CHAVE_AQUI") && !openAiKey.includes("SEU_TOKEN_AQUI");
+
+    if (!isLovableValid && !isOpenAiValid && ollamaUrl === "http://localhost:11434") {
+      // Usar Ollama local como fallback
+      return {
+        clips: [],
+        error: `Nenhuma chave de IA configurada. Opções disponíveis:\n\n1. Instale OLLAMA: https://ollama.ai/download\n   Depois rode: ollama pull mistral\n\n2. OU configure OPENAI_API_KEY no .env\n\n3. OU configure LOVABLE_API_KEY no .env\n\nPor enquanto, tentando conectar com Ollama em ${ollamaUrl}...`,
+      };
+    }
+
+    const aiConfig = isLovableValid
       ? {
           provider: "lovable" as const,
           apiKey: lovableKey,
           endpoint: "https://ai.gateway.lovable.dev/v1/chat/completions",
           model: "google/gemini-2.5-flash",
         }
-      : openAiKey
+      : isOpenAiValid
         ? {
             provider: "openai" as const,
             apiKey: openAiKey,
@@ -156,14 +168,22 @@ Extraia os 5 melhores clipes virais (30-60s) com timestamps, score, justificativ
             ],
             stream: false,
           }),
+        }).catch((err) => {
+          console.error("Ollama connection error:", err.message);
+          return new Response(JSON.stringify({ error: err.message }), { status: 0 });
         });
 
-        if (!response.ok) {
-          const text = await response.text();
+        if (!response.ok || response.status === 0) {
+          const statusText = response.status === 0 
+            ? `Não consegui conectar ao Ollama em ${aiConfig.endpoint}`
+            : `Ollama retornou status ${response.status}`;
+          
+          const text = await response.text().catch(() => "");
           console.error("Ollama error:", response.status, text);
+          
           return { 
             clips: [], 
-            error: `Erro ao conectar com Ollama (${response.status}). Certifique-se que Ollama está rodando em ${aiConfig.endpoint}` 
+            error: `${statusText}.\n\nSolução: Instale Ollama (https://ollama.ai) e rode:\n  ollama pull mistral\n  ollama serve\n\nOu configure uma chave de IA no .env:\n  OPENAI_API_KEY=sk-...\n  LOVABLE_API_KEY=seu-token` 
           };
         }
 
