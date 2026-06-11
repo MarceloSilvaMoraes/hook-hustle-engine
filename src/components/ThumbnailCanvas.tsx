@@ -6,6 +6,7 @@ import {
   drawNeonBorder,
   drawGradientBorder,
   drawCornerBadge,
+  getViralPreset,
   type CharacterHighlight,
   type VisualEffect,
   type ThumbnailEnhancements,
@@ -53,95 +54,8 @@ export function getDefaultConfig(clip: ViralClip): ThumbnailConfig {
     return "score" as const;
   };
 
-  // Add character highlight in center-right area (typical focal point)
-  const characterHighlights = [
-    {
-      x: 0.60, // Right side where character usually is
-      y: 0.35,
-      width: 0.35,
-      height: 0.55,
-      intensity: "high" as const, // High intensity for main character
-    },
-  ];
-
-  // Add MASSIVE and MULTIPLE visual effects for extreme viral impact
-  const visualEffects = [
-    // GIANT arrow pointing UP-RIGHT to character
-    {
-      type: "arrow" as const,
-      x: 0.35,
-      y: 0.25,
-      size: 0.25,
-      color: "#FFFF00",
-      rotation: 30,
-      opacity: 1,
-      thickness: 8,
-    },
-    // MASSIVE central glow
-    {
-      type: "glow" as const,
-      x: 0.5,
-      y: 0.5,
-      size: 0.4,
-      color: "#FF4500",
-      opacity: 0.8,
-    },
-    // TOP-LEFT star burst
-    {
-      type: "star" as const,
-      x: 0.15,
-      y: 0.2,
-      size: 0.15,
-      color: "#FFD700",
-      opacity: 1,
-    },
-    // TOP-RIGHT star burst
-    {
-      type: "star" as const,
-      x: 0.85,
-      y: 0.2,
-      size: 0.15,
-      color: "#FF6600",
-      opacity: 1,
-    },
-    // Explosion effect - LEFT
-    {
-      type: "explosion" as const,
-      x: 0.1,
-      y: 0.1,
-      size: 0.12,
-      color: "#FF0000",
-      opacity: 0.9,
-    },
-    // Explosion effect - RIGHT
-    {
-      type: "explosion" as const,
-      x: 0.9,
-      y: 0.1,
-      size: 0.12,
-      color: "#FF00FF",
-      opacity: 0.9,
-    },
-    // Circle with glow - CENTER
-    {
-      type: "circle" as const,
-      x: 0.5,
-      y: 0.5,
-      size: 0.25,
-      color: "#FFFF00",
-      opacity: 0.7,
-    },
-  ];
-
-  const enhancements = {
-    characterHighlights,
-    visualEffects,
-    cornerBadges: determineBadge(clip.score),
-    borderStyle: "neon" as const, // Neon border for viral effect
-    borderThickness: 20, // VERY THICK border
-    useGlowEffect: true,
-    characterBoxColor: "#FFFF00", // Bright yellow
-  };
+  // Use viral preset for maximum engagement
+  const enhancements = getViralPreset(mainTrigger);
   
   return {
     titleText: clip.title,
@@ -151,7 +65,7 @@ export function getDefaultConfig(clip: ViralClip): ThumbnailConfig {
     showScore: true,
     textPosition: "center",
     enhancements,
-    useViralEffects: true,
+    useViralEffects: true, // Enable viral effects by default
   };
 }
 
@@ -181,15 +95,11 @@ export function ThumbnailCanvas({ clip, config, onExport, width = 320, youtubeTh
 
       // 2. Background (Image or Gradient)
       if (bgImg) {
-        // Draw YouTube thumbnail to cover canvas (FULL ORIGINAL IMAGE)
+        // Draw YouTube thumbnail practically UNTOUCHED (like real YouTube)
         ctx.drawImage(bgImg, 0, 0, 1280, 720);
 
-        // MUCH DARKER overlay to make effects pop - keep original visible but darker
-        const overlay = ctx.createLinearGradient(0, 0, 1280, 0);
-        overlay.addColorStop(0, "rgba(0, 0, 0, 0.65)");
-        overlay.addColorStop(0.5, "rgba(0, 0, 0, 0.45)");
-        overlay.addColorStop(1, "rgba(0, 0, 0, 0.3)");
-        ctx.fillStyle = overlay;
+        // MINIMAL overlay - just a very slight darken (keeps original look)
+        ctx.fillStyle = "rgba(0, 0, 0, 0.08)";
         ctx.fillRect(0, 0, 1280, 720);
       } else {
         // Fallback gradient if no image
@@ -238,89 +148,67 @@ export function ThumbnailCanvas({ clip, config, onExport, width = 320, youtubeTh
       ctx.fillStyle = outerGlow;
       ctx.fillRect(0, 0, 1280, 720);
 
-      // 4. Large Decorative Emoji (Right side) - MASSIVE
+      // 4. Simple Emoji (like YouTube thumbnails)
       if (currentConfig.emoji) {
         ctx.save();
-        ctx.font = "320px 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif"; // HUGE
+        ctx.font = "160px 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif"; // Normal size
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.translate(1040, 430);
-        ctx.rotate((20 * Math.PI) / 180);
-        ctx.globalAlpha = 1; // FULL OPACITY
+        ctx.translate(950, 380);
+        ctx.rotate((10 * Math.PI) / 180); // Subtle rotation
+        ctx.globalAlpha = 0.85; // Natural opacity
         
-        // Triple shadow for extreme glow
-        ctx.shadowColor = "rgba(255, 200, 0, 0.8)";
-        ctx.shadowBlur = 60;
-        ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = 0;
+        // Minimal shadow for depth
+        ctx.shadowColor = "rgba(0, 0, 0, 0.3)";
+        ctx.shadowBlur = 15;
+        ctx.shadowOffsetX = 5;
+        ctx.shadowOffsetY = 5;
         
         ctx.fillText(currentConfig.emoji, 0, 0);
-        
-        // Add extra color glow
-        ctx.shadowColor = schemeInfo.colors[0];
-        ctx.shadowBlur = 40;
-        ctx.globalAlpha = 0.6;
-        ctx.fillText(currentConfig.emoji, 0, 0);
-        
         ctx.restore();
       }
 
-      // 4.5 Draw MASSIVE Visual Effects FIRST (under text but over image)
-      if (currentConfig.useViralEffects && enhancements.visualEffects && enhancements.visualEffects.length > 0) {
+      // 4.5 Draw visual effects (viral-style)
+      if (currentConfig.useViralEffects && enhancements.visualEffects.length > 0) {
         drawVisualEffects(ctx, enhancements.visualEffects, 1280, 720);
       }
 
-      // 4.6 Draw Character Highlights (big golden boxes)
-      if (enhancements.characterHighlights && enhancements.characterHighlights.length > 0) {
+      // 4.6 Draw character highlights (viral-style)
+      if (currentConfig.useViralEffects && enhancements.characterHighlights.length > 0) {
         drawCharacterHighlights(ctx, enhancements.characterHighlights, 1280, 720, enhancements.characterBoxColor);
       }
 
-      // 5. Score Badge (Top Right) - ENHANCED
+      // 5. Score Badge (Top Right) - SIMPLE and clean like YouTube
       if (currentConfig.showScore) {
         ctx.save();
         const bx = 1130;
         const by = 110;
-        const radius = 75;
+        const radius = 65;
 
-        // Outer Glow/Border - MASSIVE
-        ctx.shadowColor = schemeInfo.colors[0];
-        ctx.shadowBlur = 40;
-        
+        // Simple circle badge with score
         ctx.beginPath();
         ctx.arc(bx, by, radius, 0, 2 * Math.PI);
-        ctx.fillStyle = "#09090b"; // dark surface
-        ctx.strokeStyle = "#ffffff";
-        ctx.lineWidth = 8;
+        ctx.fillStyle = "rgba(0, 0, 0, 0.6)"; // semi-transparent dark
         ctx.fill();
-        ctx.stroke();
-
-        // Inner glow ring
-        ctx.beginPath();
-        ctx.arc(bx, by, radius - 10, 0, 2 * Math.PI);
-        ctx.strokeStyle = schemeInfo.colors[0];
+        ctx.strokeStyle = "#ffffff";
         ctx.lineWidth = 3;
         ctx.stroke();
 
-        // Score Value
-        ctx.shadowColor = "transparent";
-        ctx.shadowBlur = 0;
+        // Score Value - simple and clean
         ctx.fillStyle = "#ffffff";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.font = "900 60px 'Outfit', 'Montserrat', 'Inter', sans-serif";
-        ctx.fillText(clip.score.toString(), bx, by - 10);
+        ctx.font = "900 50px 'Outfit', 'Montserrat', 'Inter', sans-serif";
+        ctx.fillText(clip.score.toString(), bx, by - 8);
 
         // Score Label
-        ctx.font = "bold 14px 'Outfit', 'Montserrat', 'Inter', sans-serif";
-        ctx.fillStyle = schemeInfo.colors[1];
-        ctx.fillText("VIRAL", bx, by + 32);
+        ctx.font = "bold 12px 'Outfit', 'Montserrat', 'Inter', sans-serif";
+        ctx.fillStyle = "#ffff00";
+        ctx.fillText("VIRAL", bx, by + 28);
         ctx.restore();
       }
 
-      // 5.7 Draw Corner Badge - PROMINENT
-      if (enhancements.cornerBadges) {
-        drawCornerBadge(ctx, 1280, 720, enhancements.cornerBadges, schemeInfo.colors[0]);
-      }
+      // 5.7 Skip corner badge (keep natural)
 
       // 6. Draw Text (Title & Subtitle)
       ctx.save();

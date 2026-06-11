@@ -9,10 +9,12 @@ export interface CharacterHighlight {
   width: number; // width (0-1, relative to width)
   height: number; // height (0-1, relative to height)
   intensity: "low" | "medium" | "high"; // how much to highlight
+  style?: "box" | "halo" | "spotlight" | "neon-box"; // highlight style
+  label?: string; // optional label for the character
 }
 
 export interface VisualEffect {
-  type: "arrow" | "circle" | "box" | "star" | "explosion" | "glow" | "text-outline";
+  type: "arrow" | "circle" | "box" | "star" | "explosion" | "glow" | "text-outline" | "lightning" | "pulse-ring" | "directional-arrow";
   x?: number; // x position (0-1)
   y?: number; // y position (0-1)
   size?: number; // size (0-1)
@@ -21,6 +23,8 @@ export interface VisualEffect {
   opacity?: number; // 0-1
   label?: string; // text for the effect
   thickness?: number; // stroke thickness
+  targetX?: number; // for directional effects (0-1)
+  targetY?: number; // for directional effects (0-1)
 }
 
 export interface ThumbnailEnhancements {
@@ -80,44 +84,55 @@ export function drawCharacterHighlights(
     const y = highlight.y * canvasHeight;
     const w = highlight.width * canvasWidth;
     const h = highlight.height * canvasHeight;
+    const style = highlight.style || "box";
 
-    ctx.save();
+    if (style === "spotlight") {
+      drawSpotlight(ctx, x, y, w, h, boxColor, highlight.intensity);
+    } else if (style === "halo") {
+      drawHalo(ctx, x, y, w, h, boxColor, highlight.intensity);
+    } else if (style === "neon-box") {
+      drawNeonBox(ctx, x, y, w, h, boxColor, highlight.intensity === "high" ? 8 : 6);
+      drawPulseRing(ctx, x + w / 2, y + h / 2, Math.max(w, h) * 0.4, boxColor, 3);
+    } else {
+      // Default box style
+      ctx.save();
 
-    if (highlight.intensity === "high") {
-      // Neon glow effect
-      ctx.shadowColor = boxColor;
-      ctx.shadowBlur = 25;
-      ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 0;
-    } else if (highlight.intensity === "medium") {
-      // Medium glow
-      ctx.shadowColor = boxColor;
-      ctx.shadowBlur = 12;
-      ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 0;
+      if (highlight.intensity === "high") {
+        // Neon glow effect
+        ctx.shadowColor = boxColor;
+        ctx.shadowBlur = 25;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
+      } else if (highlight.intensity === "medium") {
+        // Medium glow
+        ctx.shadowColor = boxColor;
+        ctx.shadowBlur = 12;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
+      }
+
+      // Draw the box
+      ctx.strokeStyle = boxColor;
+      ctx.lineWidth = highlight.intensity === "high" ? 6 : 4;
+      ctx.globalAlpha = highlight.intensity === "high" ? 0.9 : 0.7;
+
+      // Rounded rectangle
+      const radius = 15;
+      ctx.beginPath();
+      ctx.moveTo(x + radius, y);
+      ctx.lineTo(x + w - radius, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
+      ctx.lineTo(x + w, y + h - radius);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
+      ctx.lineTo(x + radius, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
+      ctx.lineTo(x, y + radius);
+      ctx.quadraticCurveTo(x, y, x + radius, y);
+      ctx.closePath();
+      ctx.stroke();
+
+      ctx.restore();
     }
-
-    // Draw the box
-    ctx.strokeStyle = boxColor;
-    ctx.lineWidth = highlight.intensity === "high" ? 6 : 4;
-    ctx.globalAlpha = highlight.intensity === "high" ? 0.9 : 0.7;
-
-    // Rounded rectangle
-    const radius = 15;
-    ctx.beginPath();
-    ctx.moveTo(x + radius, y);
-    ctx.lineTo(x + w - radius, y);
-    ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
-    ctx.lineTo(x + w, y + h - radius);
-    ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
-    ctx.lineTo(x + radius, y + h);
-    ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
-    ctx.lineTo(x, y + radius);
-    ctx.quadraticCurveTo(x, y, x + radius, y);
-    ctx.closePath();
-    ctx.stroke();
-
-    ctx.restore();
   });
 }
 
@@ -156,6 +171,14 @@ export function drawVisualEffects(
         drawArrow(ctx, x, y, size, color, thickness);
         break;
 
+      case "directional-arrow":
+        if (effect.targetX !== undefined && effect.targetY !== undefined) {
+          const targetX = effect.targetX * canvasWidth;
+          const targetY = effect.targetY * canvasHeight;
+          drawDirectionalArrow(ctx, x, y, targetX, targetY, color, thickness);
+        }
+        break;
+
       case "circle":
         ctx.beginPath();
         ctx.arc(x, y, size, 0, 2 * Math.PI);
@@ -172,6 +195,14 @@ export function drawVisualEffects(
 
       case "explosion":
         drawExplosion(ctx, x, y, size, color, thickness);
+        break;
+
+      case "lightning":
+        drawLightning(ctx, x, y, size, color, thickness);
+        break;
+
+      case "pulse-ring":
+        drawPulseRing(ctx, x, y, size, color, thickness);
         break;
 
       case "glow":
@@ -434,3 +465,481 @@ export function drawCornerBadge(
 
   ctx.restore();
 }
+
+/**
+ * Draw spotlight effect on a character (viral style)
+ */
+export function drawSpotlight(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  color: string,
+  intensity: "low" | "medium" | "high" = "high"
+) {
+  ctx.save();
+
+  const centerX = x + width / 2;
+  const centerY = y + height / 2;
+  const spotlightRadius = Math.max(width, height) * 0.7;
+
+  // Create radial gradient for spotlight
+  const spotlightGradient = ctx.createRadialGradient(
+    centerX,
+    centerY,
+    0,
+    centerX,
+    centerY,
+    spotlightRadius * 2
+  );
+
+  spotlightGradient.addColorStop(0, color.includes("#") ? color + "40" : color);
+  spotlightGradient.addColorStop(0.5, color.includes("#") ? color + "20" : color);
+  spotlightGradient.addColorStop(1, "rgba(0,0,0,0)");
+
+  ctx.fillStyle = spotlightGradient;
+  ctx.fillRect(x - spotlightRadius, y - spotlightRadius, spotlightRadius * 2, spotlightRadius * 2);
+
+  ctx.restore();
+}
+
+/**
+ * Draw halo/aura effect around character (viral style)
+ */
+export function drawHalo(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  color: string,
+  intensity: "low" | "medium" | "high" = "high"
+) {
+  ctx.save();
+
+  const centerX = x + width / 2;
+  const centerY = y + height / 2;
+  const radius = Math.max(width, height) * 0.6;
+
+  // Multiple halo layers for more impact
+  const layers = intensity === "high" ? 4 : intensity === "medium" ? 2 : 1;
+
+  for (let i = 0; i < layers; i++) {
+    const layerRadius = radius + i * 10;
+    const alpha = intensity === "high" ? 0.3 - i * 0.05 : intensity === "medium" ? 0.2 - i * 0.03 : 0.1;
+
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 20 + i * 10;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 4 - i * 0.5;
+    ctx.globalAlpha = alpha;
+
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, layerRadius, 0, 2 * Math.PI);
+    ctx.stroke();
+  }
+
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+/**
+ * Draw lightning bolt effect
+ */
+export function drawLightning(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+  color: string,
+  thickness: number
+) {
+  ctx.save();
+
+  ctx.strokeStyle = color;
+  ctx.lineWidth = thickness;
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 20;
+
+  // Lightning pattern
+  const points = [
+    [0, 0],
+    [size * 0.2, size * 0.3],
+    [size * 0.1, size * 0.5],
+    [size * 0.3, size * 0.7],
+    [0, size],
+  ];
+
+  ctx.beginPath();
+  ctx.moveTo(x + points[0][0], y + points[0][1]);
+
+  for (let i = 1; i < points.length; i++) {
+    ctx.lineTo(x + points[i][0], y + points[i][1]);
+  }
+
+  ctx.stroke();
+
+  // Fill with semi-transparent color
+  ctx.strokeStyle = color;
+  ctx.globalAlpha = 0.3;
+  ctx.lineWidth = thickness * 2;
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  ctx.restore();
+}
+
+/**
+ * Draw pulse ring effect (expanding circle)
+ */
+export function drawPulseRing(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  radius: number,
+  color: string,
+  thickness: number
+) {
+  ctx.save();
+
+  ctx.strokeStyle = color;
+  ctx.lineWidth = thickness;
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 15;
+  ctx.globalAlpha = 0.8;
+
+  // Draw 3 expanding rings
+  for (let i = 0; i < 3; i++) {
+    const ringRadius = radius - i * 20;
+    if (ringRadius > 0) {
+      ctx.beginPath();
+      ctx.arc(x, y, ringRadius, 0, 2 * Math.PI);
+      ctx.stroke();
+    }
+  }
+
+  ctx.restore();
+}
+
+/**
+ * Draw neon box around character (more viral)
+ */
+export function drawNeonBox(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  color: string,
+  thickness: number = 6
+) {
+  ctx.save();
+
+  const cornerSize = Math.min(width, height) * 0.15;
+
+  // Glow effect
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 25;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 0;
+
+  // Draw corners only (more viral aesthetic)
+  ctx.strokeStyle = color;
+  ctx.lineWidth = thickness;
+
+  // Top-left corner
+  ctx.beginPath();
+  ctx.moveTo(x, y + cornerSize);
+  ctx.lineTo(x, y);
+  ctx.lineTo(x + cornerSize, y);
+  ctx.stroke();
+
+  // Top-right corner
+  ctx.beginPath();
+  ctx.moveTo(x + width - cornerSize, y);
+  ctx.lineTo(x + width, y);
+  ctx.lineTo(x + width, y + cornerSize);
+  ctx.stroke();
+
+  // Bottom-right corner
+  ctx.beginPath();
+  ctx.moveTo(x + width, y + height - cornerSize);
+  ctx.lineTo(x + width, y + height);
+  ctx.lineTo(x + width - cornerSize, y + height);
+  ctx.stroke();
+
+  // Bottom-left corner
+  ctx.beginPath();
+  ctx.moveTo(x + cornerSize, y + height);
+  ctx.lineTo(x, y + height);
+  ctx.lineTo(x, y + height - cornerSize);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+/**
+ * Draw directional arrow pointing from one point to another
+ */
+function drawDirectionalArrow(
+  ctx: CanvasRenderingContext2D,
+  fromX: number,
+  fromY: number,
+  toX: number,
+  toY: number,
+  color: string,
+  thickness: number
+) {
+  ctx.save();
+
+  const dx = toX - fromX;
+  const dy = toY - fromY;
+  const angle = Math.atan2(dy, dx);
+  const distance = Math.sqrt(dx * dx + dy * dy);
+  const headlen = 30;
+
+  // Glow effect
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 20;
+
+  // Draw line
+  ctx.strokeStyle = color;
+  ctx.lineWidth = thickness + 2;
+  ctx.beginPath();
+  ctx.moveTo(fromX, fromY);
+  ctx.lineTo(toX, toY);
+  ctx.stroke();
+
+  // Draw arrowhead
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(toX, toY);
+  ctx.lineTo(toX - headlen * Math.cos(angle - Math.PI / 6), toY - headlen * Math.sin(angle - Math.PI / 6));
+  ctx.lineTo(toX - headlen * Math.cos(angle + Math.PI / 6), toY - headlen * Math.sin(angle + Math.PI / 6));
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.restore();
+}
+
+/**
+ * Get preset viral thumbnail enhancements based on trigger type
+ */
+export function getViralPreset(triggerType: string): ThumbnailEnhancements {
+  const baseColor = "#FFD700";
+  const accentColor = "#FF0000";
+
+  const presets: Record<string, ThumbnailEnhancements> = {
+    humor: {
+      characterHighlights: [
+        {
+          x: 0.15,
+          y: 0.4,
+          width: 0.25,
+          height: 0.45,
+          intensity: "high",
+          style: "spotlight",
+        },
+      ],
+      visualEffects: [
+        {
+          type: "explosion",
+          x: 0.15,
+          y: 0.2,
+          size: 0.15,
+          color: "#FFD700",
+          opacity: 0.9,
+        },
+        {
+          type: "lightning",
+          x: 0.85,
+          y: 0.3,
+          size: 0.15,
+          color: "#FFAA00",
+          thickness: 4,
+        },
+      ],
+      cornerBadges: "hot",
+      borderStyle: "neon",
+      borderThickness: 12,
+      useGlowEffect: true,
+      characterBoxColor: "#FFD700",
+    },
+    controversy: {
+      characterHighlights: [
+        {
+          x: 0.25,
+          y: 0.35,
+          width: 0.3,
+          height: 0.5,
+          intensity: "high",
+          style: "neon-box",
+        },
+      ],
+      visualEffects: [
+        {
+          type: "pulse-ring",
+          x: 0.25,
+          y: 0.6,
+          size: 0.15,
+          color: "#FF0000",
+          thickness: 4,
+        },
+        {
+          type: "arrow",
+          x: 0.8,
+          y: 0.25,
+          size: 0.2,
+          color: "#FF0000",
+          rotation: 45,
+          opacity: 0.9,
+        },
+      ],
+      cornerBadges: "trending",
+      borderStyle: "gradient",
+      borderThickness: 14,
+      useGlowEffect: true,
+      characterBoxColor: "#FF0000",
+    },
+    emotional: {
+      characterHighlights: [
+        {
+          x: 0.2,
+          y: 0.3,
+          width: 0.28,
+          height: 0.52,
+          intensity: "high",
+          style: "halo",
+        },
+      ],
+      visualEffects: [
+        {
+          type: "glow",
+          x: 0.2,
+          y: 0.55,
+          size: 0.25,
+          color: "#FF00FF",
+          opacity: 0.4,
+        },
+      ],
+      cornerBadges: "exclusive",
+      borderStyle: "gradient",
+      borderThickness: 10,
+      useGlowEffect: true,
+      characterBoxColor: "#FF00FF",
+    },
+    hook: {
+      characterHighlights: [
+        {
+          x: 0.15,
+          y: 0.35,
+          width: 0.3,
+          height: 0.5,
+          intensity: "high",
+          style: "spotlight",
+        },
+      ],
+      visualEffects: [
+        {
+          type: "circle",
+          x: 0.85,
+          y: 0.5,
+          size: 0.1,
+          color: "#00CCFF",
+          thickness: 5,
+          opacity: 0.8,
+        },
+        {
+          type: "arrow",
+          x: 0.75,
+          y: 0.3,
+          size: 0.18,
+          color: "#00CCFF",
+          rotation: 135,
+          opacity: 0.85,
+        },
+      ],
+      cornerBadges: "new",
+      borderStyle: "neon",
+      borderThickness: 11,
+      useGlowEffect: true,
+      characterBoxColor: "#00CCFF",
+    },
+    high_value: {
+      characterHighlights: [
+        {
+          x: 0.22,
+          y: 0.32,
+          width: 0.27,
+          height: 0.5,
+          intensity: "high",
+          style: "neon-box",
+        },
+      ],
+      visualEffects: [
+        {
+          type: "star",
+          x: 0.8,
+          y: 0.3,
+          size: 0.18,
+          color: "#00FF00",
+          thickness: 4,
+          opacity: 0.9,
+        },
+        {
+          type: "pulse-ring",
+          x: 0.8,
+          y: 0.3,
+          size: 0.12,
+          color: "#00FF00",
+          thickness: 3,
+        },
+      ],
+      cornerBadges: "trending",
+      borderStyle: "gradient",
+      borderThickness: 12,
+      useGlowEffect: true,
+      characterBoxColor: "#00FF00",
+    },
+    cliffhanger: {
+      characterHighlights: [
+        {
+          x: 0.18,
+          y: 0.33,
+          width: 0.29,
+          height: 0.52,
+          intensity: "high",
+          style: "halo",
+        },
+      ],
+      visualEffects: [
+        {
+          type: "lightning",
+          x: 0.82,
+          y: 0.25,
+          size: 0.2,
+          color: "#FF6600",
+          thickness: 5,
+        },
+        {
+          type: "explosion",
+          x: 0.12,
+          y: 0.25,
+          size: 0.12,
+          color: "#FFAA00",
+          opacity: 0.85,
+        },
+      ],
+      cornerBadges: "hot",
+      borderStyle: "neon",
+      borderThickness: 13,
+      useGlowEffect: true,
+      characterBoxColor: "#FF6600",
+    },
+  };
+
+  return presets[triggerType] || presets.hook;
+}
+
+

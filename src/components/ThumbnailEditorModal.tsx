@@ -331,6 +331,72 @@ export function ThumbnailEditorModal({
                   })}
                 </div>
               </div>
+
+              {/* Add Character/Personagem */}
+              <div className="mt-4 space-y-2">
+                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
+                  ✨ Personagens Destacados
+                </label>
+                <p className="text-[9px] text-zinc-500 mb-2">
+                  Adicione retângulos ao redor dos personagens principais para destacá-los
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      const newHighlight = {
+                        x: 0.15,
+                        y: 0.35,
+                        width: 0.3,
+                        height: 0.5,
+                        intensity: "high" as const,
+                        style: "halo" as const,
+                      };
+                      setConfig((prev) => ({
+                        ...prev,
+                        enhancements: {
+                          ...prev.enhancements,
+                          characterHighlights: [
+                            ...(prev.enhancements?.characterHighlights || []),
+                            newHighlight,
+                          ],
+                        },
+                      }));
+                    }}
+                    className="flex-1 py-2 px-3 text-[10px] bg-blue-900/40 border border-blue-700/60 text-blue-300 rounded-lg hover:bg-blue-900/60 transition-all font-bold"
+                  >
+                    + Adicionar Personagem
+                  </button>
+                </div>
+                
+                {/* List of character highlights */}
+                <div className="space-y-2 mt-3 max-h-32 overflow-y-auto">
+                  {config.enhancements?.characterHighlights?.map((highlight, idx) => (
+                    <div key={idx} className="flex items-center gap-2 p-2 bg-zinc-900/50 rounded-lg border border-zinc-800/60">
+                      <div className="flex-1">
+                        <div className="text-[9px] text-zinc-400">Personagem {idx + 1}</div>
+                        <div className="text-[9px] text-zinc-500">
+                          Estilo: {highlight.style === "halo" ? "Halo" : highlight.style === "spotlight" ? "Spotlight" : "Caixa"}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          const newHighlights = config.enhancements?.characterHighlights?.filter((_, i) => i !== idx) || [];
+                          setConfig((prev) => ({
+                            ...prev,
+                            enhancements: {
+                              ...prev.enhancements,
+                              characterHighlights: newHighlights,
+                            },
+                          }));
+                        }}
+                        className="px-2 py-1 text-[9px] bg-red-900/30 text-red-400 rounded hover:bg-red-900/50 transition-all"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
 
