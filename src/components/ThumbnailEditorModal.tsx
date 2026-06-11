@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { X, RotateCcw, Save, Type, Paintbrush, Smile, Award, AlignJustify, Check } from "lucide-react";
+import { X, RotateCcw, Save, Type, Paintbrush, Smile, Award, AlignJustify, Check, Sparkles, Zap } from "lucide-react";
 import type { ViralClip } from "@/lib/clips.functions";
 import {
   ThumbnailCanvas,
@@ -245,6 +245,87 @@ export function ThumbnailEditorModal({
                         }`}
                       >
                         {pos === "top" ? "Topo" : pos === "center" ? "Meio" : "Base"}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Viral Effects Section */}
+            <div className="border-t border-zinc-800/60 pt-4">
+              <h4 className="text-xs font-bold text-zinc-300 uppercase tracking-wider mb-3 flex items-center gap-2">
+                <Sparkles className="size-3.5 text-yellow-500" />
+                Efeitos Virais
+              </h4>
+              
+              {/* Border Style */}
+              <div className="space-y-2 mb-4">
+                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
+                  <Zap className="size-3 inline mr-1" />
+                  Estilo de Borda
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {(["solid", "neon", "double", "gradient", "none"] as const).map((style) => {
+                    const enhancements = config.enhancements || {};
+                    const isSelected = (enhancements.borderStyle || "gradient") === style;
+                    return (
+                      <button
+                        key={style}
+                        onClick={() => setConfig((prev) => ({
+                          ...prev,
+                          enhancements: {
+                            ...prev.enhancements,
+                            borderStyle: style,
+                          },
+                        }))}
+                        className={`py-1.5 px-2 text-[10px] rounded-lg font-bold transition-all ${
+                          isSelected
+                            ? "bg-zinc-800 text-white border border-zinc-600"
+                            : "border border-zinc-900 text-zinc-500 hover:text-zinc-300"
+                        }`}
+                      >
+                        {style === "solid" ? "Sólido" : style === "neon" ? "Neon" : style === "double" ? "Duplo" : style === "gradient" ? "Gradiente" : "Nenhum"}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Corner Badge */}
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
+                  Badge de Canto
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {(["score", "new", "hot", "trending", "exclusive", null] as const).map((badge) => {
+                    const enhancements = config.enhancements || {};
+                    const isSelected = (enhancements.cornerBadges || "score") === badge;
+                    const badgeLabels: Record<string, string> = {
+                      score: "Score",
+                      new: "Novo",
+                      hot: "Hot",
+                      trending: "Tendência",
+                      exclusive: "Exclusivo",
+                      none: "Nenhum",
+                    };
+                    return (
+                      <button
+                        key={badge || "none"}
+                        onClick={() => setConfig((prev) => ({
+                          ...prev,
+                          enhancements: {
+                            ...prev.enhancements,
+                            cornerBadges: badge,
+                          },
+                        }))}
+                        className={`py-1.5 px-2 text-[10px] rounded-lg font-bold transition-all ${
+                          isSelected
+                            ? "bg-zinc-800 text-white border border-zinc-600"
+                            : "border border-zinc-900 text-zinc-500 hover:text-zinc-300"
+                        }`}
+                      >
+                        {badgeLabels[badge || "none"]}
                       </button>
                     );
                   })}

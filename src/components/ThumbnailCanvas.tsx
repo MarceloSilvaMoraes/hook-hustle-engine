@@ -1,5 +1,16 @@
 import { useEffect, useRef } from "react";
 import type { ViralClip, ClipTrigger } from "@/lib/clips.functions";
+import {
+  drawCharacterHighlights,
+  drawVisualEffects,
+  drawNeonBorder,
+  drawGradientBorder,
+  drawCornerBadge,
+  type CharacterHighlight,
+  type VisualEffect,
+  type ThumbnailEnhancements,
+  getDefaultEnhancements,
+} from "@/lib/thumbnail-effects";
 
 export interface ThumbnailConfig {
   titleText: string;
@@ -8,6 +19,9 @@ export interface ThumbnailConfig {
   emoji: string;
   showScore: boolean;
   textPosition: "top" | "center" | "bottom";
+  // New enhancement options
+  enhancements?: ThumbnailEnhancements;
+  useViralEffects?: boolean; // Enable aggressive viral effects
 }
 
 interface ThumbnailCanvasProps {
@@ -38,6 +52,8 @@ export function getDefaultConfig(clip: ViralClip): ThumbnailConfig {
     emoji: COLOR_SCHEMES[scheme]?.emoji || "👀",
     showScore: true,
     textPosition: "center",
+    enhancements: getDefaultEnhancements(),
+    useViralEffects: true,
   };
 }
 
@@ -100,9 +116,22 @@ export function ThumbnailCanvas({ clip, config, onExport, width = 320, youtubeTh
       }
 
       // 3. Themed Border (accent color of the trigger)
-      ctx.strokeStyle = schemeInfo.colors[0];
-      ctx.lineWidth = 14;
-      ctx.strokeRect(0, 0, 1280, 720);
+      const enhancements = currentConfig.enhancements || getDefaultEnhancements();
+      
+      if (enhancements.borderStyle === "gradient") {
+        drawGradientBorder(ctx, 1280, 720, schemeInfo.colors[0], schemeInfo.colors[1], enhancements.borderThickness);
+      } else if (enhancements.borderStyle === "neon") {
+        drawNeonBorder(ctx, 1280, 720, schemeInfo.colors[0], enhancements.borderThickness);
+      } else if (enhancements.borderStyle === "double") {
+        ctx.strokeStyle = schemeInfo.colors[0];
+        ctx.lineWidth = enhancements.borderThickness;
+        ctx.strokeRect(enhancements.borderThickness / 2, enhancements.borderThickness / 2, 1280 - enhancements.borderThickness, 720 - enhancements.borderThickness);
+        ctx.strokeRect(enhancements.borderThickness * 2, enhancements.borderThickness * 2, 1280 - enhancements.borderThickness * 4, 720 - enhancements.borderThickness * 4);
+      } else if (enhancements.borderStyle !== "none") {
+        ctx.strokeStyle = schemeInfo.colors[0];
+        ctx.lineWidth = enhancements.borderThickness;
+        ctx.strokeRect(0, 0, 1280, 720);
+      }
 
       // Radial dark vignette around the edges
       const vignette = ctx.createRadialGradient(640, 360, 250, 640, 360, 750);
@@ -164,6 +193,21 @@ export function ThumbnailCanvas({ clip, config, onExport, width = 320, youtubeTh
         ctx.fillStyle = schemeInfo.colors[1];
         ctx.fillText("VIRAL SCORE", bx, by + 28);
         ctx.restore();
+      }
+
+      // 5.5 Draw Character Highlights (if provided)
+      if (enhancements.characterHighlights && enhancements.characterHighlights.length > 0) {
+        drawCharacterHighlights(ctx, enhancements.characterHighlights, 1280, 720, enhancements.characterBoxColor);
+      }
+
+      // 5.6 Draw Visual Effects (arrows, stars, etc)
+      if (currentConfig.useViralEffects && enhancements.visualEffects && enhancements.visualEffects.length > 0) {
+        drawVisualEffects(ctx, enhancements.visualEffects, 1280, 720);
+      }
+
+      // 5.7 Draw Corner Badge (NEW, HOT, TRENDING, etc)
+      if (enhancements.cornerBadges) {
+        drawCornerBadge(ctx, 1280, 720, enhancements.cornerBadges, schemeInfo.colors[0]);
       }
 
       // 6. Draw Text (Title & Subtitle)

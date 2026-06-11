@@ -1,0 +1,7 @@
+Aqui está o link do canal do YouTube onde os vídeos são publicados de acordo com a configuração atual do seu arquivo .env:
+
+Nome do canal: marcelo silva
+Link direto: https://www.youtube.com/channel/UCTo_oWXX3Pys5k0o1k5ebMQ
+Custom URL: @marcelosilva-cu5et
+
+me manda o código do github para eu subir manualmente
