@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { workerSupabase } from "./worker-supabase.server";
+import { generateThumbnailAutomatic } from "./thumbnail-generation.functions";
 import type { RenderJobClip, RenderJobRow } from "./render-jobs.types";
 
 const RenderJobClipSchema = z.object({
@@ -44,15 +45,61 @@ function formatRenderJobsError(error: { message?: string; details?: string; hint
   return message;
 }
 
+// 🎬 Gerar thumbnails para clips que não têm
+async function ensureClipThumbnails(
+  clips: z.infer<typeof RenderJobClipSchema>[],
+  videoUrl: string
+): Promise<z.infer<typeof RenderJobClipSchema>[]> {
+  const clipsNeedingThumbs = clips.filter((c) => !c.thumbnailDataUrl);
+  
+  if (clipsNeedingThumbs.length === 0 || !videoUrl) {
+    return clips;
+  }
+
+  console.log(`📸 Gerando thumbnails para ${clipsNeedingThumbs.length} clipes sem thumb...`);
+  
+  const updated = await Promise.all(
+    clips.map(async (clip) => {
+      if (clip.thumbnailDataUrl) {
+        return clip; // Já tem thumbnail
+      }
+
+      try {
+        const result = await generateThumbnailAutomatic({
+          videoPath: videoUrl,
+          clipTitle: clip.title,
+          clipHook: clip.hookQuote,
+          triggerType: (clip.triggers[0] || "hook") as any,
+          extractAtSeconds: 2,
+          personPosition: "center",
+        });
+        
+        return {
+          ...clip,
+          thumbnailDataUrl: result.success ? result.thumbnailDataUrl : undefined,
+        };
+      } catch (error) {
+        console.warn(`⚠️ Thumbnail falhou para "${clip.title}":`, error);
+        return clip;
+      }
+    })
+  );
+
+  return updated;
+}
+
 export const createRenderJob = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => createRenderJobInput.parse(data))
   .handler(async ({ data }) => {
+    // 🎬 Gerar thumbnails que faltam
+    const clipsWithThumbs = await ensureClipThumbnails(data.clipItems, data.videoUrl);
+
     const payload = {
       video_url: data.videoUrl,
       video_title: data.videoTitle,
       platform: data.platform,
       render_format: data.renderFormat,
-      clip_items: data.clipItems,
+      clip_items: clipsWithThumbs,
       instructions: data.instructions,
       status: "pending",
       requested_by: null,

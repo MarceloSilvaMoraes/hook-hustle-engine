@@ -1,9 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { generateThumbnailQuick } from "./thumbnail-generation.functions";
 
 const InputSchema = z.object({
   transcript: z.string().min(50).max(80000),
   videoTitle: z.string().max(300).optional().default(""),
+  videoPath: z.string().optional(), // 🎬 Caminho do vídeo para gerar thumbnails
   platform: z.string().max(50).optional().default("TikTok/Reels (9:16)"),
   tone: z.string().max(100).optional().default("High Energy"),
 });
@@ -22,6 +24,7 @@ export interface ViralClip {
   captionStyle: string;
   brollSuggestion: string;
   transcriptExcerpt: string;
+  thumbnailDataUrl?: string; // 🎬 Thumbnail gerada automaticamente
 }
 
 export interface ClipAnalysisResult {
@@ -175,6 +178,34 @@ Extraia os 5 melhores clipes virais (30-60s) com timestamps, score, justificativ
 
         const parsed = JSON.parse(jsonMatch[0]) as { clips: ViralClip[] };
         const sorted = [...parsed.clips].sort((a, b) => b.score - a.score);
+        
+        // 🎬 Gerar thumbnails se videoPath foi fornecido
+        if (data.videoPath) {
+          console.log(`📸 Gerando thumbnails para ${sorted.length} clipes...`);
+          const clipsWithThumbs = await Promise.all(
+            sorted.map(async (clip) => {
+              try {
+                const result = await generateThumbnailQuick({
+                  videoPath: data.videoPath!,
+                  clipTitle: clip.title,
+                  clipHook: clip.hookQuote,
+                  triggerType: clip.triggers[0] as any,
+                  extractAtSeconds: 2,
+                  personPosition: "center",
+                });
+                return {
+                  ...clip,
+                  thumbnailDataUrl: result.success ? result.thumbnailDataUrl : undefined,
+                };
+              } catch (error) {
+                console.warn(`⚠️ Thumbnail falhou para "${clip.title}":`, error);
+                return clip;
+              }
+            })
+          );
+          return { clips: clipsWithThumbs };
+        }
+        
         return { clips: sorted };
       }
 
@@ -225,6 +256,34 @@ Extraia os 5 melhores clipes virais (30-60s) com timestamps, score, justificativ
 
       const parsed = JSON.parse(toolCall.function.arguments) as { clips: ViralClip[] };
       const sorted = [...parsed.clips].sort((a, b) => b.score - a.score);
+      
+      // 🎬 Gerar thumbnails se videoPath foi fornecido
+      if (data.videoPath) {
+        console.log(`📸 Gerando thumbnails para ${sorted.length} clipes...`);
+        const clipsWithThumbs = await Promise.all(
+          sorted.map(async (clip) => {
+            try {
+              const result = await generateThumbnailQuick({
+                videoPath: data.videoPath!,
+                clipTitle: clip.title,
+                clipHook: clip.hookQuote,
+                triggerType: clip.triggers[0] as any,
+                extractAtSeconds: 2,
+                personPosition: "center",
+              });
+              return {
+                ...clip,
+                thumbnailDataUrl: result.success ? result.thumbnailDataUrl : undefined,
+              };
+            } catch (error) {
+              console.warn(`⚠️ Thumbnail falhou para "${clip.title}":`, error);
+              return clip;
+            }
+          })
+        );
+        return { clips: clipsWithThumbs };
+      }
+      
       return { clips: sorted };
     } catch (e) {
       console.error("analyzeTranscript failed:", e);
