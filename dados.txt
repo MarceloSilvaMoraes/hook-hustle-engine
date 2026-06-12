@@ -4,4 +4,13 @@ Nome do canal: marcelo silva
 Link direto: https://www.youtube.com/channel/UCTo_oWXX3Pys5k0o1k5ebMQ
 Custom URL: @marcelosilva-cu5et
 
-me manda o código do github para eu subir manualmente
+me manda o comando do github para eu subir manualmente
+
+
+eu preciso que as thumbs dos meus vídeos fiquem parecidos com esses 
+que viralizam e chamam atenção, 
+e que mostre os personagens principais que estão no vídeos
+
+git add src/lib/thumbnail-generation.functions.ts src/lib/thumbnail-automation.example.ts THUMBNAIL_AUTOMATION_SETUP.md THUMBNAIL_AUTOMATION_COMPLETE.md
+git commit -m "🎬 Add automated thumbnail generation system: 4-step pipeline (capture→remove-bg→text→compose)"
+git push origin main

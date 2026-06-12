@@ -4,7 +4,6 @@ import sharp from "sharp";
 import { execSync } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
-import { workerSupabase } from "./worker-supabase.server";
 
 /**
  * 🎬 PIPELINE PROFISSIONAL DE COMPOSIÇÃO DE THUMBNAILS
@@ -595,5 +594,3 @@ export const generateProfessionalThumbnail = createServerFn({ method: "POST" })
       };
     }
   });
-
-export type { z } from "zod";
