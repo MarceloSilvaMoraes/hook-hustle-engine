@@ -1402,7 +1402,7 @@ function Index() {
                     index={idx}
                     thumbnailConfig={clipThumbnailConfigs[idx]}
                     onThumbnailSave={(dataUrl, config) => handleSaveThumbnail(idx, dataUrl, config)}
-                    youtubeThumbnailDataUrl={youtubeThumbnailDataUrl}
+                    youtubeThumbnailDataUrl={clip.thumbnailDataUrl || youtubeThumbnailDataUrl}
                     onPlay={
                       videoId
                         ? (c) => {

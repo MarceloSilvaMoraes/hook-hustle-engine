@@ -42,3 +42,7 @@ __pycache__/
 # Sensitive files
 senhas projeto.txt
 chat-history.md
+
+# Temporary files
+.temp-*
+*.part
