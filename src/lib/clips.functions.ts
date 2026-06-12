@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { generateThumbnailQuick } from "./thumbnail-generation.functions";
+import { generateProfessionalThumbnail } from "./thumbnail-professional.functions";
 
 const InputSchema = z.object({
   transcript: z.string().min(50).max(80000),
@@ -199,19 +199,21 @@ Extraia os 5 melhores clipes virais (30-60s) com timestamps, score, justificativ
         const parsed = JSON.parse(jsonMatch[0]) as { clips: ViralClip[] };
         const sorted = [...parsed.clips].sort((a, b) => b.score - a.score);
         
-        // 🎬 Gerar thumbnails se videoPath foi fornecido
+        // 🎬 Gerar thumbnails profissionais se videoPath foi fornecido
         if (data.videoPath) {
-          console.log(`📸 Gerando thumbnails para ${sorted.length} clipes...`);
+          console.log(`📸 Gerando thumbnails profissionais para ${sorted.length} clipes...`);
           const clipsWithThumbs = await Promise.all(
             sorted.map(async (clip) => {
               try {
-                const result = await generateThumbnailQuick({
+                const result = await generateProfessionalThumbnail({
                   videoPath: data.videoPath!,
                   clipTitle: clip.title,
                   clipHook: clip.hookQuote,
                   triggerType: clip.triggers[0] as any,
                   extractAtSeconds: 2,
-                  personPosition: "center",
+                  personPositions: ["center"],
+                  backgroundTemplate: "dark_gradient",
+                  useAdvancedEffects: true,
                 });
                 return {
                   ...clip,
@@ -277,19 +279,21 @@ Extraia os 5 melhores clipes virais (30-60s) com timestamps, score, justificativ
       const parsed = JSON.parse(toolCall.function.arguments) as { clips: ViralClip[] };
       const sorted = [...parsed.clips].sort((a, b) => b.score - a.score);
       
-      // 🎬 Gerar thumbnails se videoPath foi fornecido
+      // 🎬 Gerar thumbnails profissionais se videoPath foi fornecido
       if (data.videoPath) {
-        console.log(`📸 Gerando thumbnails para ${sorted.length} clipes...`);
+        console.log(`📸 Gerando thumbnails profissionais para ${sorted.length} clipes...`);
         const clipsWithThumbs = await Promise.all(
           sorted.map(async (clip) => {
             try {
-              const result = await generateThumbnailQuick({
+              const result = await generateProfessionalThumbnail({
                 videoPath: data.videoPath!,
                 clipTitle: clip.title,
                 clipHook: clip.hookQuote,
                 triggerType: clip.triggers[0] as any,
                 extractAtSeconds: 2,
-                personPosition: "center",
+                personPositions: ["center"],
+                backgroundTemplate: "dark_gradient",
+                useAdvancedEffects: true,
               });
               return {
                 ...clip,

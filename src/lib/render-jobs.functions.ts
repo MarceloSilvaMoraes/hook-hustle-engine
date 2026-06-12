@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { workerSupabase } from "./worker-supabase.server";
-import { generateThumbnailAutomatic } from "./thumbnail-generation.functions";
+import { generateProfessionalThumbnail } from "./thumbnail-professional.functions";
 import type { RenderJobClip, RenderJobRow } from "./render-jobs.types";
 
 const RenderJobClipSchema = z.object({
@@ -65,13 +65,15 @@ async function ensureClipThumbnails(
       }
 
       try {
-        const result = await generateThumbnailAutomatic({
+        const result = await generateProfessionalThumbnail({
           videoPath: videoUrl,
           clipTitle: clip.title,
           clipHook: clip.hookQuote,
           triggerType: (clip.triggers[0] || "hook") as any,
           extractAtSeconds: 2,
-          personPosition: "center",
+          personPositions: ["center"],
+          backgroundTemplate: "dark_gradient",
+          useAdvancedEffects: true,
         });
         
         return {
