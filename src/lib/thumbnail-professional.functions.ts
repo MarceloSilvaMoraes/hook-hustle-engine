@@ -294,7 +294,10 @@ function createBackgroundTemplate(
 }
 
 /**
- * ETAPA 4: Criar SVG de texto profissional com bordas e sombras
+ * ETAPA 4: Criar SVG de texto profissional com bordas GROSSAS (estilo YouTube)
+ * Contorno: preto com stroke-width: 18px
+ * Cor: amarelo (#FFD700)
+ * Posição: Estratégica na lateral esquerda (não cobre a pessoa)
  */
 function createTextSVG(
   title: string,
@@ -303,26 +306,29 @@ function createTextSVG(
   width: number = 1280,
   height: number = 720
 ): string {
-  const titleLines = title.match(/.{1,30}/g) || [title];
-  const hookLines = hook.match(/.{1,35}/g) || [hook];
+  // Quebrar em linhas se necessário
+  const titleLines = title.length > 25 ? title.match(/.{1,25}/g) || [title] : [title];
+  const hookLines = hook.length > 30 ? hook.match(/.{1,30}/g) || [hook] : [hook];
 
-  const titleY = height - 280;
-  const hookY = height - 100;
+  const titleFontSize = 85;
+  const hookFontSize = 50;
+  const strokeWidth = 18; // 🔴 CONTORNO MUITO GROSSO
 
-  // Fonte grossa (Impact/Bebas Neue style)
-  const titleFontSize = 90;
-  const hookFontSize = 45;
-  const strokeWidth = 5;
+  // Posicionamento: esquerda superior (não conflita com pessoa na direita)
+  let titleY = 200;
+  let hookY = 400;
 
   return `
-    <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+    <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
       <defs>
-        <filter id="titleShadow" x="-50%" y="-50%" width="200%" height="200%">
-          <feDropShadow dx="3" dy="3" stdDeviation="2" flood-opacity="0.7" flood-color="black"/>
-          <feDropShadow dx="-3" dy="-3" stdDeviation="1" flood-opacity="0.3" flood-color="white"/>
+        <!-- Filtro de sombra para profundidade -->
+        <filter id="textShadow" x="-50%" y="-50%" width="200%" height="200%">
+          <feDropShadow dx="4" dy="4" stdDeviation="3" flood-opacity="0.8" flood-color="#000000"/>
         </filter>
-        <filter id="glow">
-          <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+        
+        <!-- Filtro de brilho (opcional) -->
+        <filter id="textGlow">
+          <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
           <feMerge>
             <feMergeNode in="coloredBlur"/>
             <feMergeNode in="SourceGraphic"/>
@@ -330,39 +336,44 @@ function createTextSVG(
         </filter>
       </defs>
 
-      <!-- TÍTULO (Letras separadas para melhor controle) -->
+      <!-- TÍTULO (com contorno preto grosso + cor amarela) -->
       ${titleLines
         .map(
           (line, idx) => `
-        <!-- Borda (stroke) do título -->
+        <!-- Camada 1: Contorno Preto Grosso (Base) -->
         <text
-          x="50%"
+          x="80"
           y="${titleY + idx * 110}"
-          font-family="Impact, Arial Black, sans-serif"
+          font-family="'Impact', 'Arial Black', 'Bebas Neue', sans-serif"
           font-size="${titleFontSize}"
           font-weight="900"
-          text-anchor="middle"
-          fill="black"
-          stroke="black"
-          stroke-width="${strokeWidth + 2}"
-          style="paint-order: stroke fill; -webkit-text-stroke: ${strokeWidth}px black;"
-          filter="url(#titleShadow)"
+          letter-spacing="2"
+          fill="none"
+          stroke="#000000"
+          stroke-width="${strokeWidth}"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          paint-order="stroke fill"
+          filter="url(#textShadow)"
         >
           ${line.toUpperCase()}
         </text>
-        <!-- Cor principal do título -->
+        
+        <!-- Camada 2: Cor Amarela (Foreground) -->
         <text
-          x="50%"
+          x="80"
           y="${titleY + idx * 110}"
-          font-family="Impact, Arial Black, sans-serif"
+          font-family="'Impact', 'Arial Black', 'Bebas Neue', sans-serif"
           font-size="${titleFontSize}"
           font-weight="900"
-          text-anchor="middle"
-          fill="${colors.text}"
-          stroke="${colors.accent}"
-          stroke-width="${Math.ceil(strokeWidth / 2)}"
-          style="paint-order: stroke fill;"
-          filter="url(#titleShadow)"
+          letter-spacing="2"
+          fill="#FFD700"
+          stroke="#000000"
+          stroke-width="${Math.ceil(strokeWidth / 3)}"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          paint-order="stroke fill"
+          filter="url(#textGlow)"
         >
           ${line.toUpperCase()}
         </text>
@@ -370,51 +381,70 @@ function createTextSVG(
         )
         .join("")}
 
-      <!-- HOOK/SUB-TEXTO -->
+      <!-- HOOK/SUBTITLE (com contorno, mas um pouco menor) -->
       ${hookLines
         .map(
           (line, idx) => `
-        <!-- Borda (stroke) do hook -->
+        <!-- Contorno Preto -->
         <text
-          x="50%"
-          y="${hookY + idx * 55}"
-          font-family="Arial, sans-serif"
+          x="80"
+          y="${hookY + idx * 65}"
+          font-family="'Arial', 'Helvetica', sans-serif"
           font-size="${hookFontSize}"
-          font-weight="bold"
-          text-anchor="middle"
-          fill="black"
-          stroke="black"
-          stroke-width="${Math.ceil(strokeWidth / 1.5)}"
-          style="paint-order: stroke fill;"
+          font-weight="700"
+          letter-spacing="1"
+          fill="none"
+          stroke="#000000"
+          stroke-width="${Math.ceil(strokeWidth * 0.7)}"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          paint-order="stroke fill"
+          filter="url(#textShadow)"
         >
           ${line}
         </text>
-        <!-- Cor do hook -->
+        
+        <!-- Cor Branca/Amarelo claro -->
         <text
-          x="50%"
-          y="${hookY + idx * 55}"
-          font-family="Arial, sans-serif"
+          x="80"
+          y="${hookY + idx * 65}"
+          font-family="'Arial', 'Helvetica', sans-serif"
           font-size="${hookFontSize}"
-          font-weight="bold"
-          text-anchor="middle"
-          fill="${colors.text}"
-          opacity="0.95"
+          font-weight="700"
+          letter-spacing="1"
+          fill="#FFFFFF"
+          stroke="#000000"
+          stroke-width="${Math.ceil(strokeWidth / 4)}"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          paint-order="stroke fill"
+          filter="url(#textGlow)"
         >
           ${line}
         </text>
       `
         )
         .join("")}
+
+      <!-- EMOJI de destaque (trigger type) -->
+      <text
+        x="${width - 120}"
+        y="100"
+        font-family="Arial, sans-serif"
+        font-size="72"
+        opacity="0.7"
+      >
+        ${colors.emoji}
+      </text>
     </svg>
   `;
 }
 
 /**
- * ETAPA 4: Compor camadas profissionalmente
- * Camada 1: Fundo
- * Camada 2: Pessoas (com drop shadow)
- * Camada 3: Texto
- * Camada 4: Efeitos opcionais
+ * 🎨 NOVO PIPELINE DE COMPOSIÇÃO (3 CAMADAS)
+ * Camada 1: Fundo degradê escuro (1280x720)
+ * Camada 2: Pessoa isolada (posição direita, SEM DEFORMAÇÃO)
+ * Camada 3: Texto overlay (fonte pesada, contorno preto grosso, amarelo)
  */
 async function composeProfessionalThumbnail(
   personImages: Array<{ path: string; position: "left" | "center" | "right" }>,
@@ -424,76 +454,82 @@ async function composeProfessionalThumbnail(
   outputPath: string
 ): Promise<void> {
   try {
-    const width = 1280;
-    const height = 720;
+    const THUMB_WIDTH = 1280;
+    const THUMB_HEIGHT = 720;
+    const PERSON_HEIGHT = 650; // Ocupa quase toda a altura
 
-    // Mapa de posições de pessoas
-    const positionMap: Record<"left" | "center" | "right", { x: number; width: number; height: number }> = {
-      left: { x: 40, width: 380, height: 680 },
-      center: { x: 450, width: 380, height: 680 },
-      right: { x: 860, width: 380, height: 680 },
-    };
+    console.log("🎨 [NOVA COMPOSIÇÃO] Camadas independentes - Garantindo qualidade sem deformação...");
 
-    console.log("🎨 Iniciando composição em camadas...");
+    // ═══════════════════════════════════════════════════════════════
+    // CAMADA 1: Fundo Degradê Escuro (1280x720)
+    // ═══════════════════════════════════════════════════════════════
+    console.log(`  📍 Camada 1: Criando fundo base ${THUMB_WIDTH}x${THUMB_HEIGHT}`);
+    
+    let compositeImage = await sharp(Buffer.from(backgroundSvg))
+      .resize(THUMB_WIDTH, THUMB_HEIGHT, { fit: "fill" })
+      .png()
+      .toBuffer();
 
-    // Camada 1: Fundo
-    let image = sharp(Buffer.from(backgroundSvg));
+    // ═══════════════════════════════════════════════════════════════
+    // CAMADA 2: Pessoa (Lateral Direita, Redimensionamento Proporcional)
+    // ═══════════════════════════════════════════════════════════════
+    console.log(`  📍 Camada 2: Processando pessoa (altura: ${PERSON_HEIGHT}px, fit: inside)`);
 
-    // Camada 2: Pessoas com efeitos
-    for (const person of personImages) {
-      const pos = positionMap[person.position];
+    const person = personImages[0]; // Usar primeira pessoa
+    
+    // ⚠️ CRITICAL: fit: 'inside' evita QUALQUER deformação
+    let personBuffer = await sharp(person.path)
+      .resize(PERSON_HEIGHT, PERSON_HEIGHT, {
+        fit: "inside",           // 🔴 NÃO DEFORMA
+        withoutEnlargement: false, // Pode ampliar se for muito pequena
+        background: { r: 0, g: 0, b: 0, alpha: 0 }, // Fundo transparente
+      })
+      .png()
+      .toBuffer();
 
-      // Redimensionar pessoa com fundo transparente
-      let personBuffer = await sharp(person.path)
-        .resize(pos.width, pos.height, {
-          fit: "contain",
-          background: { r: 0, g: 0, b: 0, alpha: 0 },
-        })
-        .png()
-        .toBuffer();
+    // Obter dimensões reais da pessoa após redimensionamento
+    const personMetadata = await sharp(personBuffer).metadata();
+    const personActualWidth = personMetadata.width || PERSON_HEIGHT;
+    const personActualHeight = personMetadata.height || PERSON_HEIGHT;
 
-      // Aplicar efeito de sombra se enabled
-      if (useAdvancedEffects) {
-        const shadowSvg = `
-          <svg width="${pos.width}" height="${pos.height}" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-              <filter id="dropShadow">
-                <feDropShadow dx="8" dy="8" stdDeviation="6" flood-opacity="0.6" flood-color="black"/>
-              </filter>
-            </defs>
-            <image href="data:image/png;base64,${personBuffer.toString("base64")}" 
-                   width="${pos.width}" height="${pos.height}" filter="url(#dropShadow)"/>
-          </svg>
-        `;
-        personBuffer = await sharp(Buffer.from(shadowSvg)).png().toBuffer();
-      }
+    console.log(`  ✅ Pessoa redimensionada: ${personActualWidth}x${personActualHeight} (sem deformação)`);
 
-      // Compor pessoa no fundo
-      image = image.composite([
+    // Posição: lateral direita, centrada verticalmente
+    const personLeft = THUMB_WIDTH - personActualWidth - 50; // 50px de margem direita
+    const personTop = Math.max(0, (THUMB_HEIGHT - personActualHeight) / 2);
+
+    console.log(`  ✅ Pessoa posicionada: left=${personLeft}, top=${personTop}`);
+
+    // ═══════════════════════════════════════════════════════════════
+    // CAMADA 3: Texto Overlay (Contorno Preto Grosso, Amarelo)
+    // ═══════════════════════════════════════════════════════════════
+    console.log(`  📍 Camada 3: Criando overlay de texto com contorno`);
+
+    // Compor todas as camadas
+    const finalComposite = await sharp(compositeImage)
+      .composite([
         {
           input: personBuffer,
-          top: Math.max(0, height - pos.height) / 2 + 20,
-          left: pos.x,
+          top: Math.round(personTop),
+          left: Math.round(personLeft),
+          blend: "over", // Transparência preservada
+        },
+        {
+          input: Buffer.from(textSvg),
+          top: 0,
+          left: 0,
           blend: "over",
         },
-      ]);
-    }
+      ])
+      .flatten({ background: { r: 15, g: 23, b: 42 } }) // Fundo escuro como fallback
+      .jpeg({ quality: 95, progressive: true })
+      .toFile(outputPath);
 
-    // Camada 3: Texto
-    image = image.composite([
-      {
-        input: Buffer.from(textSvg),
-        top: 0,
-        left: 0,
-        blend: "over",
-      },
-    ]);
-
-    // Exportar como JPEG de alta qualidade
-    await image.jpeg({ quality: 95, progressive: true }).toFile(outputPath);
-    console.log(`✅ Thumbnail composta: ${outputPath}`);
+    console.log(`✅ Thumbnail composta com sucesso!`);
+    console.log(`   Dimensão final: ${finalComposite.width}x${finalComposite.height}`);
+    console.log(`   Tamanho: ${(finalComposite.size / 1024).toFixed(2)}KB`);
   } catch (error) {
-    console.error("Erro na composição:", error);
+    console.error("❌ Erro na composição:", error);
     throw new Error("Falha na composição da thumbnail profissional");
   }
 }
