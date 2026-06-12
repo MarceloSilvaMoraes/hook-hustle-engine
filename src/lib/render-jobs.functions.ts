@@ -58,6 +58,16 @@ async function ensureClipThumbnails(
 
   console.log(`📸 Gerando thumbnails para ${clipsNeedingThumbs.length} clipes sem thumb...`);
   
+  // Lista de todos os tipos de trigger para garantir variação
+  const allTriggerTypes: Array<"humor" | "controversy" | "emotional" | "hook" | "high_value" | "cliffhanger"> = [
+    "humor",
+    "controversy",
+    "emotional",
+    "hook",
+    "high_value",
+    "cliffhanger",
+  ];
+  
   const updated = await Promise.all(
     clips.map(async (clip, index) => {
       if (clip.thumbnailDataUrl) {
@@ -65,13 +75,8 @@ async function ensureClipThumbnails(
       }
 
       try {
-        // Usar diferentes triggers para adicionar variação visual
-        let selectedTrigger = (clip.triggers && clip.triggers.length > 0) ? clip.triggers[0] : "hook";
-        
-        if (clip.triggers && clip.triggers.length > 1) {
-          // Alternar entre triggers para variação visual
-          selectedTrigger = clip.triggers[index % clip.triggers.length];
-        }
+        // FORÇA variação usando ciclo de triggers
+        const selectedTrigger = allTriggerTypes[index % allTriggerTypes.length];
         
         // Variar extractAtSeconds e backgroundTemplate para mais diversidade
         const extractAtSeconds = 2 + (index % 3);

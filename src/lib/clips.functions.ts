@@ -202,21 +202,30 @@ Extraia os 5 melhores clipes virais (30-60s) com timestamps, score, justificativ
         // 🎬 Gerar thumbnails profissionais se videoPath foi fornecido
         if (data.videoPath) {
           console.log(`📸 Gerando thumbnails profissionais para ${sorted.length} clipes...`);
+          // Lista de todos os tipos de trigger para garantir variação
+          const allTriggerTypes: Array<"humor" | "controversy" | "emotional" | "hook" | "high_value" | "cliffhanger"> = [
+            "humor",
+            "controversy",
+            "emotional",
+            "hook",
+            "high_value",
+            "cliffhanger",
+          ];
+          
           const clipsWithThumbs = await Promise.all(
             sorted.map(async (clip, index) => {
               try {
-                // Usar diferentes triggers para adicionar variação visual
-                // Se o clipe tem múltiplos triggers, alternar entre eles
-                // Caso contrário, usar o trigger disponível
-                let selectedTrigger = clip.triggers[0] as any;
+                // FORÇA variação mesmo que clipe tenha apenas um trigger
+                // Cicla entre todos os tipos de trigger possíveis
+                const selectedTrigger = allTriggerTypes[index % allTriggerTypes.length];
                 
-                if (clip.triggers.length > 1) {
-                  // Alternar entre triggers para variação visual
-                  selectedTrigger = clip.triggers[index % clip.triggers.length] as any;
-                }
-                
-                // Variar extractAtSeconds também para mais diversidade
+                // Variar extractAtSeconds para mais diversidade
                 const extractAtSeconds = 2 + (index % 3); // Alterna entre 2, 3, 4 segundos
+                
+                // Variar background template
+                const backgroundTemplate = ["dark_gradient", "vibrant_gradient", "abstract"][index % 3] as any;
+                
+                console.log(`  [${index + 1}/${sorted.length}] Trigger: ${selectedTrigger}, BG: ${backgroundTemplate}, ExtractAt: ${extractAtSeconds}s`);
                 
                 const result = await generateProfessionalThumbnail({
                   videoPath: data.videoPath!,
@@ -225,7 +234,7 @@ Extraia os 5 melhores clipes virais (30-60s) com timestamps, score, justificativ
                   triggerType: selectedTrigger,
                   extractAtSeconds,
                   personPositions: ["center"],
-                  backgroundTemplate: ["dark_gradient", "vibrant_gradient", "abstract"][index % 3] as any,
+                  backgroundTemplate,
                   useAdvancedEffects: true,
                 });
                 return {
@@ -295,20 +304,27 @@ Extraia os 5 melhores clipes virais (30-60s) com timestamps, score, justificativ
       // 🎬 Gerar thumbnails profissionais se videoPath foi fornecido
       if (data.videoPath) {
         console.log(`📸 Gerando thumbnails profissionais para ${sorted.length} clipes...`);
+        // Lista de todos os tipos de trigger para garantir variação
+        const allTriggerTypes: Array<"humor" | "controversy" | "emotional" | "hook" | "high_value" | "cliffhanger"> = [
+          "humor",
+          "controversy",
+          "emotional",
+          "hook",
+          "high_value",
+          "cliffhanger",
+        ];
+        
         const clipsWithThumbs = await Promise.all(
           sorted.map(async (clip, index) => {
             try {
-              // Usar diferentes triggers para adicionar variação visual
-              let selectedTrigger = clip.triggers[0] as any;
-              
-              if (clip.triggers.length > 1) {
-                // Alternar entre triggers para variação visual
-                selectedTrigger = clip.triggers[index % clip.triggers.length] as any;
-              }
+              // FORÇA variação usando ciclo de triggers
+              const selectedTrigger = allTriggerTypes[index % allTriggerTypes.length];
               
               // Variar extractAtSeconds e backgroundTemplate para mais diversidade
               const extractAtSeconds = 2 + (index % 3);
               const backgroundTemplate = ["dark_gradient", "vibrant_gradient", "abstract"][index % 3] as any;
+              
+              console.log(`  [${index + 1}/${sorted.length}] Trigger: ${selectedTrigger}, BG: ${backgroundTemplate}, ExtractAt: ${extractAtSeconds}s`);
               
               const result = await generateProfessionalThumbnail({
                 videoPath: data.videoPath!,
