@@ -31,6 +31,7 @@ interface ThumbnailCanvasProps {
   onExport?: (dataUrl: string) => void;
   width?: number; // Visual width for scaling preview
   youtubeThumbnailDataUrl?: string | null;
+  isPreRendered?: boolean;
 }
 
 export const COLOR_SCHEMES: Record<string, { colors: [string, string]; emoji: string; label: string }> = {
@@ -69,7 +70,7 @@ export function getDefaultConfig(clip: ViralClip): ThumbnailConfig {
   };
 }
 
-export function ThumbnailCanvas({ clip, config, onExport, width = 320, youtubeThumbnailDataUrl }: ThumbnailCanvasProps) {
+export function ThumbnailCanvas({ clip, config, onExport, width = 320, youtubeThumbnailDataUrl, isPreRendered }: ThumbnailCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
   // Calculate scaled height for 16:9 ratio
@@ -90,6 +91,19 @@ export function ThumbnailCanvas({ clip, config, onExport, width = 320, youtubeTh
       ctx.shadowBlur = 0;
       ctx.shadowOffsetX = 0;
       ctx.shadowOffsetY = 0;
+
+      if (isPreRendered && bgImg) {
+        ctx.drawImage(bgImg, 0, 0, 1280, 720);
+        if (onExport) {
+          try {
+            const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+            onExport(dataUrl);
+          } catch (err) {
+            console.error("Erro ao exportar canvas da thumbnail:", err);
+          }
+        }
+        return;
+      }
 
       const schemeInfo = COLOR_SCHEMES[currentConfig.colorScheme] || COLOR_SCHEMES.hook;
 
@@ -316,7 +330,7 @@ export function ThumbnailCanvas({ clip, config, onExport, width = 320, youtubeTh
     } else {
       drawCanvas(null);
     }
-  }, [clip, currentConfig, youtubeThumbnailDataUrl, onExport]);
+  }, [clip, currentConfig, youtubeThumbnailDataUrl, onExport, isPreRendered]);
 
   // Helper to wrap text
   const wrapText = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number) => {

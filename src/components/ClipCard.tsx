@@ -20,9 +20,10 @@ interface Props {
   thumbnailConfig?: ThumbnailConfig;
   onThumbnailSave?: (dataUrl: string, config: ThumbnailConfig) => void;
   youtubeThumbnailDataUrl?: string | null;
+  preRenderedDataUrl?: string | null;
 }
 
-export function ClipCard({ clip, index, onPlay, thumbnailConfig, onThumbnailSave, youtubeThumbnailDataUrl }: Props) {
+export function ClipCard({ clip, index, onPlay, thumbnailConfig, onThumbnailSave, youtubeThumbnailDataUrl, preRenderedDataUrl }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showEditor, setShowEditor] = useState(false);
@@ -72,17 +73,24 @@ TRECHO: "${clip.transcriptExcerpt}"`;
 
       {/* Miniatura da Thumbnail */}
       <div className="relative aspect-video w-full rounded-xl overflow-hidden mb-5 bg-zinc-950 border border-zinc-855/20 flex items-center justify-center">
-        <ThumbnailCanvas
-          clip={clip}
-          config={effectiveConfig}
-          onExport={(dataUrl) => {
-            if (onThumbnailSave) {
-              onThumbnailSave(dataUrl, effectiveConfig);
-            }
-          }}
-          width={400}
-          youtubeThumbnailDataUrl={youtubeThumbnailDataUrl}
-        />
+        {(() => {
+          const hasBeenEdited = !!thumbnailConfig;
+          const displayPreRendered = !!preRenderedDataUrl && !hasBeenEdited;
+          return (
+            <ThumbnailCanvas
+              clip={clip}
+              config={effectiveConfig}
+              onExport={displayPreRendered ? undefined : (dataUrl) => {
+                if (onThumbnailSave) {
+                  onThumbnailSave(dataUrl, effectiveConfig);
+                }
+              }}
+              width={400}
+              youtubeThumbnailDataUrl={displayPreRendered ? preRenderedDataUrl : youtubeThumbnailDataUrl}
+              isPreRendered={displayPreRendered}
+            />
+          );
+        })()}
         <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-all duration-200 flex items-center justify-center gap-2">
           <button
             onClick={() => setShowEditor(true)}

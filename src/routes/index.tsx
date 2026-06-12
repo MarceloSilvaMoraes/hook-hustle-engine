@@ -300,7 +300,7 @@ function Index() {
           renderFormat,
           clipItems: clips.map((c, idx) => ({
             ...c,
-            thumbnailDataUrl: clipThumbnails[idx] || null,
+            thumbnailDataUrl: clipThumbnails[idx] || c.thumbnailDataUrl || null,
           })),
           instructions: jobInstructions,
         },
@@ -400,8 +400,14 @@ function Index() {
 
   const mutation = useMutation({
     mutationFn: async () => {
-      const result = await analyze({
-        data: { transcript, videoTitle, platform, tone },
+       const result = await analyze({
+        data: {
+          transcript,
+          videoTitle,
+          platform,
+          tone,
+          videoPath: sourceUrl.trim() || undefined,
+        },
       });
       if (result.error) throw new Error(result.error);
       return result.clips;
@@ -1402,7 +1408,8 @@ function Index() {
                     index={idx}
                     thumbnailConfig={clipThumbnailConfigs[idx]}
                     onThumbnailSave={(dataUrl, config) => handleSaveThumbnail(idx, dataUrl, config)}
-                    youtubeThumbnailDataUrl={clip.thumbnailDataUrl || youtubeThumbnailDataUrl}
+                    youtubeThumbnailDataUrl={youtubeThumbnailDataUrl}
+                    preRenderedDataUrl={clip.thumbnailDataUrl}
                     onPlay={
                       videoId
                         ? (c) => {
