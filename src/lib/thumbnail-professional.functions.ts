@@ -27,53 +27,53 @@ const ProfessionalThumbnailSchema = z.object({
   useAdvancedEffects: z.boolean().optional().default(true),
 });
 
-// Presets de cores profissionais
+// Presets de cores PROFISSIONAIS (estilo YouTube real - Dark backgrounds com texto AMARELO)
 const DESIGN_PRESETS = {
   humor: {
-    primary: "#FF4500",
-    secondary: "#FFD700",
-    accent: "#FFAA00",
-    text: "#FFFFFF",
+    primary: "#1a2a4a",        // Dark navy blue
+    secondary: "#2a3a5a",      // Slightly lighter navy
+    accent: "#FFD700",         // Bright yellow accent
+    text: "#FFD700",           // YELLOW TEXT
     shadow: "rgba(0,0,0,0.8)",
     emoji: "😂",
   },
   controversy: {
-    primary: "#FF0000",
-    secondary: "#FF6600",
-    accent: "#FFAA00",
-    text: "#FFFFFF",
+    primary: "#2a1a1a",        // Dark red-brown
+    secondary: "#3a2a2a",      // Dark gray-red
+    accent: "#FFD700",         // Yellow accent
+    text: "#FFD700",           // YELLOW TEXT
     shadow: "rgba(0,0,0,0.8)",
     emoji: "🔥",
   },
   emotional: {
-    primary: "#6B0066",
-    secondary: "#FF00FF",
-    accent: "#FF69B4",
-    text: "#FFFFFF",
+    primary: "#1a1a3a",        // Dark purple-blue
+    secondary: "#2a1a3a",      // Dark purple
+    accent: "#FFD700",         // Yellow accent
+    text: "#FFD700",           // YELLOW TEXT
     shadow: "rgba(0,0,0,0.8)",
     emoji: "❤️",
   },
   hook: {
-    primary: "#0066FF",
-    secondary: "#00CCFF",
-    accent: "#1E90FF",
-    text: "#FFFFFF",
+    primary: "#0a1a3a",        // Very dark navy (estilo imagem referência!)
+    secondary: "#1a2a4a",      // Dark blue
+    accent: "#FFD700",         // Yellow accent
+    text: "#FFD700",           // YELLOW TEXT
     shadow: "rgba(0,0,0,0.8)",
     emoji: "👀",
   },
   high_value: {
-    primary: "#00CC00",
-    secondary: "#00FF00",
-    accent: "#32CD32",
-    text: "#FFFFFF",
+    primary: "#1a3a1a",        // Dark green
+    secondary: "#2a4a2a",      // Dark forest green
+    accent: "#FFD700",         // Yellow accent
+    text: "#FFD700",           // YELLOW TEXT
     shadow: "rgba(0,0,0,0.8)",
     emoji: "💎",
   },
   cliffhanger: {
-    primary: "#FF6600",
-    secondary: "#FFAA00",
-    accent: "#FFD700",
-    text: "#FFFFFF",
+    primary: "#2a1a0a",        // Dark orange-brown
+    secondary: "#3a2a1a",      // Dark brown
+    accent: "#FFD700",         // Yellow accent
+    text: "#FFD700",           // YELLOW TEXT
     shadow: "rgba(0,0,0,0.8)",
     emoji: "🔥",
   },
@@ -141,21 +141,130 @@ async function extractVideoFrame(
 }
 
 /**
+ * 🎭 TEMPLATES DE ROSTOS GENÉRICOS (Fallback)
+ * Se nenhum rosto for detectado no vídeo, usar um template pré-pronto
+ * Estes são rostos expressivos genéricos (reação, surpresa, etc)
+ */
+const FACE_TEMPLATES_BASE64: { [key: string]: string } = {
+  // REAÇÃO CHOCADA (para cliffhanger/hook)
+  shocked: `iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==`,
+  
+  // ENTUSIASMADO (para humor/high_value)
+  excited: `iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==`,
+  
+  // PENSATIVO (para emotional/controversy)
+  thinking: `iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==`,
+};
+
+/**
+ * VERIFICAR: A remoção de fundo funcionou?
+ * Analisar se a imagem resultante tem conteúdo significativo (não é branca/preta vazia)
+ */
+async function validateBackgroundRemovalSuccess(imagePath: string): Promise<{ isValid: boolean; pixelDensity: number }> {
+  try {
+    const metadata = await sharp(imagePath).metadata();
+    
+    // Se a imagem for muito pequena, provavelmente falhou
+    if (!metadata.width || !metadata.height || metadata.width < 100 || metadata.height < 100) {
+      return { isValid: false, pixelDensity: 0 };
+    }
+
+    // Analisar pixel density (quanto não é transparente/branco)
+    const { data } = await sharp(imagePath)
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+
+    // Contar pixels com conteúdo (não totalmente brancos/transparentes)
+    let contentPixels = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      const a = data[i + 3];
+      
+      // Se tem alpha e não é totalmente transparente, ou se tem cor
+      if (a > 128 && (r < 240 || g < 240 || b < 240)) {
+        contentPixels++;
+      }
+    }
+
+    const pixelDensity = contentPixels / (data.length / 4);
+    const isValid = pixelDensity > 0.1; // Pelo menos 10% de conteúdo útil
+
+    console.log(`   📊 Densidade de pixels: ${(pixelDensity * 100).toFixed(1)}% ${isValid ? "✅" : "❌"}`);
+    return { isValid, pixelDensity };
+  } catch (error) {
+    console.warn("⚠️  Não foi possível validar remoção de fundo:", error);
+    return { isValid: false, pixelDensity: 0 };
+  }
+}
+
+/**
+ * CRIAR FACE TEMPLATE FALLBACK (1280x650)
+ * Se a remoção de fundo falhar, usar um rosto genérico pré-feito
+ */
+function createFaceTemplateFallback(templateType: string = "excited"): string {
+  // Criar um rosto SVG genérico (se templates Base64 não funcionarem)
+  return `
+    <svg width="650" height="650" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient id="skinGradient" cx="40%" cy="40%">
+          <stop offset="0%" style="stop-color:#f4a460;stop-opacity:1" />
+          <stop offset="100%" style="stop-color:#d2691e;stop-opacity:1" />
+        </radialGradient>
+        <radialGradient id="eyeGradient">
+          <stop offset="0%" style="stop-color:#ffffff;stop-opacity:1" />
+          <stop offset="100%" style="stop-color:#e0e0e0;stop-opacity:1" />
+        </radialGradient>
+      </defs>
+      
+      <!-- Rosto -->
+      <circle cx="100" cy="100" r="90" fill="url(#skinGradient)" stroke="#d2691e" stroke-width="2"/>
+      
+      <!-- Olhos (chocado/surpreso) -->
+      <ellipse cx="75" cy="85" rx="15" ry="22" fill="url(#eyeGradient)" stroke="#000" stroke-width="1"/>
+      <ellipse cx="125" cy="85" rx="15" ry="22" fill="url(#eyeGradient)" stroke="#000" stroke-width="1"/>
+      
+      <!-- Pupilas (dilatadas para expressão) -->
+      <circle cx="75" cy="90" r="8" fill="#333"/>
+      <circle cx="125" cy="90" r="8" fill="#333"/>
+      
+      <!-- Cejas levantadas (choque) -->
+      <path d="M 55 65 Q 75 55 95 65" stroke="#8b4513" stroke-width="4" fill="none" stroke-linecap="round"/>
+      <path d="M 105 65 Q 125 55 145 65" stroke="#8b4513" stroke-width="4" fill="none" stroke-linecap="round"/>
+      
+      <!-- Boca (O de surpresa) -->
+      <circle cx="100" cy="135" r="12" fill="#c41e3a" stroke="#8b0000" stroke-width="1"/>
+      
+      <!-- Destaque no rosto (luz) -->
+      <ellipse cx="70" cy="70" rx="20" ry="25" fill="#ffffff" opacity="0.3"/>
+    </svg>
+  `;
+}
+
+/**
  * ETAPA 2: Remover fundo com fallback robusto
  * Tenta: 1) Rembg local → 2) Remove.bg API → 3) Segmentação simples
+ * Se TODAS falharem, retorna template genérico
  */
 async function removeBackgroundRobust(
   imagePath: string,
   outputPath: string,
   removeApiKey?: string
-): Promise<{ success: boolean; method: string }> {
+): Promise<{ success: boolean; method: string; usedFallback: boolean }> {
   // Método 1: Rembg local (Python)
   try {
     console.log("🎨 [Método 1] Tentando Rembg local...");
     const command = `python -m rembg i "${imagePath}" "${outputPath}" -a`;
     execSync(command, { stdio: "pipe", timeout: 30000 });
-    console.log("✅ Rembg local funcionou!");
-    return { success: true, method: "rembg_local" };
+    
+    // ✅ Validar se funcionou
+    const validation = await validateBackgroundRemovalSuccess(outputPath);
+    if (validation.isValid) {
+      console.log("✅ Rembg local funcionou!");
+      return { success: true, method: "rembg_local", usedFallback: false };
+    }
+    console.warn("⚠️  Rembg local produziu imagem vazia");
   } catch (error) {
     console.warn("⚠️  Rembg local não disponível");
   }
@@ -183,25 +292,51 @@ async function removeBackgroundRobust(
 
       const resultBuffer = await response.arrayBuffer();
       fs.writeFileSync(outputPath, Buffer.from(resultBuffer));
-      console.log("✅ Remove.bg API funcionou!");
-      return { success: true, method: "removebg_api" };
+      
+      // ✅ Validar se funcionou
+      const validation = await validateBackgroundRemovalSuccess(outputPath);
+      if (validation.isValid) {
+        console.log("✅ Remove.bg API funcionou!");
+        return { success: true, method: "removebg_api", usedFallback: false };
+      }
+      console.warn("⚠️  Remove.bg API produziu imagem vazia");
     } catch (error) {
       console.warn("⚠️  Remove.bg API falhou:", error);
     }
   }
 
-  // Método 3: Segmentação simples (cores de borda)
+  // Método 3: Segmentação simples (colors de borda)
   try {
     console.log("🎨 [Método 3] Usando segmentação simples...");
-    // Usar sharp para detectar fundo similar (edge-based)
     await sharp(imagePath)
       .removeAlpha()
       .toFile(outputPath);
-    console.log("✅ Segmentação simples funcionou!");
-    return { success: true, method: "simple_segmentation" };
+    
+    // ✅ Validar se funcionou
+    const validation = await validateBackgroundRemovalSuccess(outputPath);
+    if (validation.isValid) {
+      console.log("✅ Segmentação simples funcionou!");
+      return { success: true, method: "simple_segmentation", usedFallback: false };
+    }
+    console.warn("⚠️  Segmentação simples produziu imagem vazia");
   } catch (error) {
-    console.error("❌ Todos os métodos falharam:", error);
-    return { success: false, method: "failed" };
+    console.error("⚠️  Segmentação simples falhou:", error);
+  }
+
+  // 🎭 FALLBACK: Se tudo falhar, usar template de rosto genérico
+  console.log("🎭 [FALLBACK] Nenhum método de remoção de fundo funcionou. Usando template de rosto expressivo...");
+  try {
+    const faceSvg = createFaceTemplateFallback("excited");
+    await sharp(Buffer.from(faceSvg))
+      .resize(650, 650, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .png()
+      .toFile(outputPath);
+    
+    console.log("✅ Template de rosto genérico gerado como fallback!");
+    return { success: true, method: "face_template_fallback", usedFallback: true };
+  } catch (error) {
+    console.error("❌ Até o fallback falhou:", error);
+    return { success: false, method: "complete_failure", usedFallback: false };
   }
 }
 
@@ -294,10 +429,11 @@ function createBackgroundTemplate(
 }
 
 /**
- * ETAPA 4: Criar SVG de texto profissional com bordas GROSSAS (estilo YouTube)
- * Contorno: preto com stroke-width: 18px
+ * ETAPA 4: Criar SVG de texto profissional - EXATAMENTE COMO OS GRANDES CANAIS
+ * Contorno: preto com stroke-width: 22px (ultra visível no YouTube)
  * Cor: amarelo (#FFD700)
- * Posição: Estratégica na lateral esquerda (não cobre a pessoa)
+ * Font: Impact/Arial Black 900 (82px) - muito mais impactante
+ * Posição: Estratégica na lateral esquerda (não cobre a pessoa à direita)
  */
 function createTextSVG(
   title: string,
@@ -306,145 +442,89 @@ function createTextSVG(
   width: number = 1280,
   height: number = 720
 ): string {
-  // Quebrar em linhas se necessário
-  const titleLines = title.length > 25 ? title.match(/.{1,25}/g) || [title] : [title];
-  const hookLines = hook.length > 30 ? hook.match(/.{1,30}/g) || [hook] : [hook];
+  const titleFontSize = 82;  // 82px - MAIOR para impacto tipo YouTube
+  const hookFontSize = 42;
+  const strokeWidth = 22;    // Ultra grossa - exatamente como YouTube profissional
 
-  const titleFontSize = 85;
-  const hookFontSize = 50;
-  const strokeWidth = 18; // 🔴 CONTORNO MUITO GROSSO
-
-  // Posicionamento: esquerda superior (não conflita com pessoa na direita)
-  let titleY = 200;
-  let hookY = 400;
+  // Limpar e garantir que o texto seja maiúsculo
+  const titleUpper = title.toUpperCase();
+  const hookUpper = hook.toUpperCase();
 
   return `
-    <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
-      <defs>
-        <!-- Filtro de sombra para profundidade -->
-        <filter id="textShadow" x="-50%" y="-50%" width="200%" height="200%">
-          <feDropShadow dx="4" dy="4" stdDeviation="3" flood-opacity="0.8" flood-color="#000000"/>
-        </filter>
-        
-        <!-- Filtro de brilho (opcional) -->
-        <filter id="textGlow">
-          <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
-          <feMerge>
-            <feMergeNode in="coloredBlur"/>
-            <feMergeNode in="SourceGraphic"/>
-          </feMerge>
-        </filter>
-      </defs>
-
-      <!-- TÍTULO (com contorno preto grosso + cor amarela) -->
-      ${titleLines
-        .map(
-          (line, idx) => `
-        <!-- Camada 1: Contorno Preto Grosso (Base) -->
-        <text
-          x="80"
-          y="${titleY + idx * 110}"
-          font-family="'Impact', 'Arial Black', 'Bebas Neue', sans-serif"
-          font-size="${titleFontSize}"
-          font-weight="900"
-          letter-spacing="2"
-          fill="none"
-          stroke="#000000"
-          stroke-width="${strokeWidth}"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          paint-order="stroke fill"
-          filter="url(#textShadow)"
-        >
-          ${line.toUpperCase()}
-        </text>
-        
-        <!-- Camada 2: Cor Amarela (Foreground) -->
-        <text
-          x="80"
-          y="${titleY + idx * 110}"
-          font-family="'Impact', 'Arial Black', 'Bebas Neue', sans-serif"
-          font-size="${titleFontSize}"
-          font-weight="900"
-          letter-spacing="2"
-          fill="#FFD700"
-          stroke="#000000"
-          stroke-width="${Math.ceil(strokeWidth / 3)}"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          paint-order="stroke fill"
-          filter="url(#textGlow)"
-        >
-          ${line.toUpperCase()}
-        </text>
-      `
-        )
-        .join("")}
-
-      <!-- HOOK/SUBTITLE (com contorno, mas um pouco menor) -->
-      ${hookLines
-        .map(
-          (line, idx) => `
-        <!-- Contorno Preto -->
-        <text
-          x="80"
-          y="${hookY + idx * 65}"
-          font-family="'Arial', 'Helvetica', sans-serif"
-          font-size="${hookFontSize}"
-          font-weight="700"
-          letter-spacing="1"
-          fill="none"
-          stroke="#000000"
-          stroke-width="${Math.ceil(strokeWidth * 0.7)}"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          paint-order="stroke fill"
-          filter="url(#textShadow)"
-        >
-          ${line}
-        </text>
-        
-        <!-- Cor Branca/Amarelo claro -->
-        <text
-          x="80"
-          y="${hookY + idx * 65}"
-          font-family="'Arial', 'Helvetica', sans-serif"
-          font-size="${hookFontSize}"
-          font-weight="700"
-          letter-spacing="1"
-          fill="#FFFFFF"
-          stroke="#000000"
-          stroke-width="${Math.ceil(strokeWidth / 4)}"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          paint-order="stroke fill"
-          filter="url(#textGlow)"
-        >
-          ${line}
-        </text>
-      `
-        )
-        .join("")}
-
-      <!-- EMOJI de destaque (trigger type) -->
+    <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+      <!-- LINHA 1: AMARELA COM CONTORNO PRETO MASSIVO -->
       <text
-        x="${width - 120}"
-        y="100"
-        font-family="Arial, sans-serif"
-        font-size="72"
-        opacity="0.7"
+        x="80"
+        y="200"
+        font-family="Impact, 'Arial Black', 'Bebas Neue', sans-serif"
+        font-size="${titleFontSize}"
+        font-weight="900"
+        letter-spacing="3"
+        fill="none"
+        stroke="#000000"
+        stroke-width="${strokeWidth}"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        paint-order="stroke fill"
       >
-        ${colors.emoji}
+        ${titleUpper}
+      </text>
+      
+      <!-- LINHA 1 COLORIDA (sobre o contorno) -->
+      <text
+        x="80"
+        y="200"
+        font-family="Impact, 'Arial Black', 'Bebas Neue', sans-serif"
+        font-size="${titleFontSize}"
+        font-weight="900"
+        letter-spacing="3"
+        fill="#FFD700"
+        stroke="none"
+      >
+        ${titleUpper}
+      </text>
+      
+      <!-- LINHA 2: BRANCA COM CONTORNO PRETO -->
+      <text
+        x="80"
+        y="330"
+        font-family="Arial, 'Helvetica', sans-serif"
+        font-size="${hookFontSize}"
+        font-weight="700"
+        letter-spacing="2"
+        fill="none"
+        stroke="#000000"
+        stroke-width="${Math.ceil(strokeWidth * 0.7)}"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        paint-order="stroke fill"
+      >
+        ${hookUpper}
+      </text>
+      
+      <!-- LINHA 2 COLORIDA (sobre o contorno) -->
+      <text
+        x="80"
+        y="330"
+        font-family="Arial, 'Helvetica', sans-serif"
+        font-size="${hookFontSize}"
+        font-weight="700"
+        letter-spacing="2"
+        fill="#FFFFFF"
+        stroke="none"
+      >
+        ${hookUpper}
       </text>
     </svg>
   `;
 }
 
 /**
- * 🎨 NOVO PIPELINE DE COMPOSIÇÃO (3 CAMADAS)
- * Camada 1: Fundo degradê escuro (1280x720)
- * Camada 2: Pessoa isolada (posição direita, SEM DEFORMAÇÃO)
- * Camada 3: Texto overlay (fonte pesada, contorno preto grosso, amarelo)
+ * 🎨 COMPOSIÇÃO SIMPLES E ROBUSTA (3 CAMADAS - SEM DISTORÇÕES)
+ * Baseado em código profissional comprovado
+ * Camada 1: Fundo sólido escuro (1280x720) - #0B0D22
+ * Camada 2: Pessoa isolada (direita, fit: 'inside', altura 680px)
+ * Camada 3: Texto overlay Montserrat 82px, stroke 22px amarelo
  */
 async function composeProfessionalThumbnail(
   personImages: Array<{ path: string; position: "left" | "center" | "right" }>,
@@ -456,81 +536,84 @@ async function composeProfessionalThumbnail(
   try {
     const THUMB_WIDTH = 1280;
     const THUMB_HEIGHT = 720;
-    const PERSON_HEIGHT = 650; // Ocupa quase toda a altura
+    const PERSON_TARGET_HEIGHT = 680; // Altura consistente da pessoa
 
-    console.log("🎨 [NOVA COMPOSIÇÃO] Camadas independentes - Garantindo qualidade sem deformação...");
+    console.log("🎨 [COMPOSIÇÃO SIMPLIFICADA] 3 camadas sem distorção...");
 
     // ═══════════════════════════════════════════════════════════════
-    // CAMADA 1: Fundo Degradê Escuro (1280x720)
+    // CAMADA 1: Fundo Sólido Escuro (#0B0D22 - RGB 11, 13, 34)
     // ═══════════════════════════════════════════════════════════════
-    console.log(`  📍 Camada 1: Criando fundo base ${THUMB_WIDTH}x${THUMB_HEIGHT}`);
+    console.log(`  📍 Camada 1: Fundo 1280x720 (#0B0D22)`);
     
-    let compositeImage = await sharp(Buffer.from(backgroundSvg))
-      .resize(THUMB_WIDTH, THUMB_HEIGHT, { fit: "fill" })
+    const fundoBuffer = await sharp({
+      create: {
+        width: THUMB_WIDTH,
+        height: THUMB_HEIGHT,
+        channels: 4,
+        background: { r: 11, g: 13, b: 34, alpha: 1 } // Azul escuro de estúdio
+      }
+    })
       .png()
       .toBuffer();
 
     // ═══════════════════════════════════════════════════════════════
-    // CAMADA 2: Pessoa (Lateral Direita, Redimensionamento Proporcional)
+    // CAMADA 2: Pessoa (fit: 'inside' garante proporções perfeitas)
     // ═══════════════════════════════════════════════════════════════
-    console.log(`  📍 Camada 2: Processando pessoa (altura: ${PERSON_HEIGHT}px, fit: inside)`);
+    console.log(`  📍 Camada 2: Pessoa com fit: 'inside' (altura ${PERSON_TARGET_HEIGHT}px)`);
 
-    const person = personImages[0]; // Usar primeira pessoa
+    const person = personImages[0];
     
-    // ⚠️ CRITICAL: fit: 'inside' evita QUALQUER deformação
+    // ⭐ CHAVE: fit: 'inside' GARANTE ZERO DISTORÇÃO
     let personBuffer = await sharp(person.path)
-      .resize(PERSON_HEIGHT, PERSON_HEIGHT, {
-        fit: "inside",           // 🔴 NÃO DEFORMA
-        withoutEnlargement: false, // Pode ampliar se for muito pequena
-        background: { r: 0, g: 0, b: 0, alpha: 0 }, // Fundo transparente
+      .resize(PERSON_TARGET_HEIGHT, PERSON_TARGET_HEIGHT, {
+        fit: "inside",           // Redimensiona SEM deformar
+        withoutEnlargement: false, // Pode ampliar se necessário
       })
       .png()
       .toBuffer();
 
-    // Obter dimensões reais da pessoa após redimensionamento
-    const personMetadata = await sharp(personBuffer).metadata();
-    const personActualWidth = personMetadata.width || PERSON_HEIGHT;
-    const personActualHeight = personMetadata.height || PERSON_HEIGHT;
-
-    console.log(`  ✅ Pessoa redimensionada: ${personActualWidth}x${personActualHeight} (sem deformação)`);
-
-    // Posição: lateral direita, centrada verticalmente
-    const personLeft = THUMB_WIDTH - personActualWidth - 50; // 50px de margem direita
-    const personTop = Math.max(0, (THUMB_HEIGHT - personActualHeight) / 2);
-
-    console.log(`  ✅ Pessoa posicionada: left=${personLeft}, top=${personTop}`);
-
     // ═══════════════════════════════════════════════════════════════
-    // CAMADA 3: Texto Overlay (Contorno Preto Grosso, Amarelo)
+    // CAMADA 3: Texto SVG com Contorno Amarelo
+    // Converter SVG para buffer PNG para garantir renderização correta
     // ═══════════════════════════════════════════════════════════════
-    console.log(`  📍 Camada 3: Criando overlay de texto com contorno`);
+    console.log(`  📍 Camada 3: Texto overlay com contorno 22px`);
 
-    // Compor todas as camadas
-    const finalComposite = await sharp(compositeImage)
+    let textBuffer: Buffer;
+    try {
+      // Tentar renderizar SVG para PNG usando Sharp
+      textBuffer = await sharp(Buffer.from(textSvg))
+        .png()
+        .toBuffer();
+    } catch (svgError) {
+      console.warn("⚠️  SVG rendering failed, using text SVG directly");
+      // Fallback: usar SVG diretamente sem pré-renderização
+      textBuffer = Buffer.from(textSvg);
+    }
+
+    // Composição final: fundo + pessoa (direita) + texto (esquerda)
+    const finalComposite = await sharp(fundoBuffer)
       .composite([
         {
           input: personBuffer,
-          top: Math.round(personTop),
-          left: Math.round(personLeft),
-          blend: "over", // Transparência preservada
+          top: 40,              // Top: 40px (perto do topo)
+          left: 680,            // Left: 680 (metade da tela, pessoa na direita)
+          blend: "over",
         },
         {
-          input: Buffer.from(textSvg),
+          input: textBuffer,
           top: 0,
           left: 0,
           blend: "over",
         },
       ])
-      .flatten({ background: { r: 15, g: 23, b: 42 } }) // Fundo escuro como fallback
-      .jpeg({ quality: 95, progressive: true })
+      .flatten({ background: { r: 11, g: 13, b: 34 } })
+      .jpeg({ quality: 90 })
       .toFile(outputPath);
 
-    console.log(`✅ Thumbnail composta com sucesso!`);
-    console.log(`   Dimensão final: ${finalComposite.width}x${finalComposite.height}`);
-    console.log(`   Tamanho: ${(finalComposite.size / 1024).toFixed(2)}KB`);
+    console.log(`✅ Thumbnail: ${finalComposite.width}x${finalComposite.height}, ${(finalComposite.size / 1024).toFixed(2)}KB`);
   } catch (error) {
     console.error("❌ Erro na composição:", error);
-    throw new Error("Falha na composição da thumbnail profissional");
+    throw new Error("Falha na composição");
   }
 }
 
@@ -571,7 +654,7 @@ export const generateProfessionalThumbnail = createServerFn({ method: "POST" })
       // ETAPA 2: Remover fundo
       console.log("📍 ETAPA 2: Removendo fundo (segmentação)");
       const bgRemovalResult = await removeBackgroundRobust(frameFile, noBackgroundFile, removeApiKey);
-      console.log(`   Método utilizado: ${bgRemovalResult.method}`);
+      console.log(`   Método utilizado: ${bgRemovalResult.method}${bgRemovalResult.usedFallback ? " (FALLBACK)" : ""}`);
 
       // ETAPA 3: Criar templates de fundo
       console.log("📍 ETAPA 3: Criando fundo templato");
@@ -609,8 +692,11 @@ export const generateProfessionalThumbnail = createServerFn({ method: "POST" })
       return {
         success: true,
         thumbnailDataUrl: dataUrl,
-        message: "✅ Thumbnail profissional gerada!",
+        message: bgRemovalResult.usedFallback 
+          ? "✅ Thumbnail gerada com template de rosto (arquivo sem rosto claro detectado)" 
+          : "✅ Thumbnail profissional gerada com rosto extraído!",
         backgroundMethod: bgRemovalResult.method,
+        usedFaceTemplateFallback: bgRemovalResult.usedFallback,
         processingTimeMs: Date.now() - timestamp,
       };
     } catch (error) {

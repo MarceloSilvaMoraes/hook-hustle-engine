@@ -1,5 +1,5 @@
 # Multi-stage build para Hook Hustle Engine
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
@@ -8,20 +8,27 @@ RUN apk add --no-cache \
     python3 \
     py3-pip \
     ffmpeg \
-    build-essential
+    build-base
 
-# Copiar arquivos de dependency
+# Copiar apenas os arquivos de dependency
 COPY package*.json ./
-RUN npm ci
+COPY tsconfig.json ./
+COPY vite.config.ts ./
+COPY components.json ./
+COPY eslint.config.js ./
 
-# Copiar código
-COPY . .
+RUN npm install --ignore-scripts --legacy-peer-deps
+
+# Copiar apenas o código
+COPY src ./src
+COPY public ./public
+COPY scripts ./scripts
 
 # Build
 RUN npm run build
 
 # ===== Imagem final =====
-FROM node:20-alpine
+FROM node:22-alpine
 
 WORKDIR /app
 
@@ -32,13 +39,10 @@ RUN apk add --no-cache \
     ffmpeg \
     ca-certificates
 
-# Instalar Rembg
-RUN pip install rembg --break-system-packages
-
-# Copiar arquivos necessários
+# Copiar apenas o necessário
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/package*.json ./
+COPY package*.json ./
 
 # Criar diretórios
 RUN mkdir -p tmp/thumbnails
