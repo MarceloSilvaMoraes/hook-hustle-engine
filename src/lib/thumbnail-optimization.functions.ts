@@ -55,9 +55,16 @@ function generateVideoHash(videoPath: string): string {
 
 /**
  * HELPER: Gerar ID de cache
+ * Agora inclui um identificador único para cada geração
  */
-function generateCacheId(videoHash: string, clipTitle: string, triggerType: string, personPosition: string): string {
-  const combined = `${videoHash}_${clipTitle}_${triggerType}_${personPosition}`;
+function generateCacheId(
+  videoHash: string, 
+  clipTitle: string, 
+  triggerType: string, 
+  personPosition: string,
+  uniqueId?: string // Adiciona identificador único para evitar colisões
+): string {
+  const combined = `${videoHash}_${clipTitle}_${triggerType}_${personPosition}${uniqueId ? `_${uniqueId}` : ""}`;
   return crypto.createHash("sha256").update(combined).digest("hex").substring(0, 24);
 }
 
@@ -72,12 +79,19 @@ export const getCachedThumbnail = createServerFn({ method: "POST" })
         clipTitle: z.string(),
         triggerType: z.string(),
         personPosition: z.string(),
+        uniqueId: z.string().optional(), // Adiciona identificador único
       }).parse(data)
   )
   .handler(async ({ data }) => {
     try {
       const videoHash = generateVideoHash(data.videoPath);
-      const cacheId = generateCacheId(videoHash, data.clipTitle, data.triggerType, data.personPosition);
+      const cacheId = generateCacheId(
+        videoHash, 
+        data.clipTitle, 
+        data.triggerType, 
+        data.personPosition,
+        data.uniqueId
+      );
 
       console.log(`🔍 Procurando no cache: ${cacheId}`);
 
@@ -127,12 +141,19 @@ export const cacheThumbnail = createServerFn({ method: "POST" })
         personPosition: z.string(),
         thumbnailDataUrl: z.string(),
         processingTimeMs: z.number(),
+        uniqueId: z.string().optional(), // Adiciona identificador único
       }).parse(data)
   )
   .handler(async ({ data }) => {
     try {
       const videoHash = generateVideoHash(data.videoPath);
-      const cacheId = generateCacheId(videoHash, data.clipTitle, data.triggerType, data.personPosition);
+      const cacheId = generateCacheId(
+        videoHash, 
+        data.clipTitle, 
+        data.triggerType, 
+        data.personPosition,
+        data.uniqueId
+      );
 
       const CACHE_TTL_DAYS = 30; // Cache válido por 30 dias
       const entry: ThumbnailCacheEntry = {
@@ -375,6 +396,7 @@ export const generateThumbnailOptimized = createServerFn({ method: "POST" })
         extractAtSeconds: z.number().optional().default(2),
         webhookUrl: z.string().url().optional(),
         autoUploadToSupabase: z.boolean().optional().default(true),
+        clipIndex: z.number().optional(), // Identificador único para o clipe
       }).parse(data)
   )
   .handler(async ({ data }) => {
@@ -383,13 +405,14 @@ export const generateThumbnailOptimized = createServerFn({ method: "POST" })
     try {
       console.log("🚀 Iniciando geração otimizada de thumbnail...");
 
-      // Etapa 1: Verificar cache
+      // Etapa 1: Verificar cache (com identificador único para evitar colisões)
       console.log("[1/5] Verificando cache...");
       const cachedResult = await getCachedThumbnail({
         videoPath: data.videoPath,
         clipTitle: data.clipTitle,
         triggerType: data.triggerType,
         personPosition: data.personPosition,
+        uniqueId: data.clipIndex !== undefined ? `clip_${data.clipIndex}` : undefined,
       });
 
       if (cachedResult.cached) {

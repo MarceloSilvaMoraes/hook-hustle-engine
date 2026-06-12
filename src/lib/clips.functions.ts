@@ -203,16 +203,29 @@ Extraia os 5 melhores clipes virais (30-60s) com timestamps, score, justificativ
         if (data.videoPath) {
           console.log(`📸 Gerando thumbnails profissionais para ${sorted.length} clipes...`);
           const clipsWithThumbs = await Promise.all(
-            sorted.map(async (clip) => {
+            sorted.map(async (clip, index) => {
               try {
+                // Usar diferentes triggers para adicionar variação visual
+                // Se o clipe tem múltiplos triggers, alternar entre eles
+                // Caso contrário, usar o trigger disponível
+                let selectedTrigger = clip.triggers[0] as any;
+                
+                if (clip.triggers.length > 1) {
+                  // Alternar entre triggers para variação visual
+                  selectedTrigger = clip.triggers[index % clip.triggers.length] as any;
+                }
+                
+                // Variar extractAtSeconds também para mais diversidade
+                const extractAtSeconds = 2 + (index % 3); // Alterna entre 2, 3, 4 segundos
+                
                 const result = await generateProfessionalThumbnail({
                   videoPath: data.videoPath!,
                   clipTitle: clip.title,
                   clipHook: clip.hookQuote,
-                  triggerType: clip.triggers[0] as any,
-                  extractAtSeconds: 2,
+                  triggerType: selectedTrigger,
+                  extractAtSeconds,
                   personPositions: ["center"],
-                  backgroundTemplate: "dark_gradient",
+                  backgroundTemplate: ["dark_gradient", "vibrant_gradient", "abstract"][index % 3] as any,
                   useAdvancedEffects: true,
                 });
                 return {
@@ -283,16 +296,28 @@ Extraia os 5 melhores clipes virais (30-60s) com timestamps, score, justificativ
       if (data.videoPath) {
         console.log(`📸 Gerando thumbnails profissionais para ${sorted.length} clipes...`);
         const clipsWithThumbs = await Promise.all(
-          sorted.map(async (clip) => {
+          sorted.map(async (clip, index) => {
             try {
+              // Usar diferentes triggers para adicionar variação visual
+              let selectedTrigger = clip.triggers[0] as any;
+              
+              if (clip.triggers.length > 1) {
+                // Alternar entre triggers para variação visual
+                selectedTrigger = clip.triggers[index % clip.triggers.length] as any;
+              }
+              
+              // Variar extractAtSeconds e backgroundTemplate para mais diversidade
+              const extractAtSeconds = 2 + (index % 3);
+              const backgroundTemplate = ["dark_gradient", "vibrant_gradient", "abstract"][index % 3] as any;
+              
               const result = await generateProfessionalThumbnail({
                 videoPath: data.videoPath!,
                 clipTitle: clip.title,
                 clipHook: clip.hookQuote,
-                triggerType: clip.triggers[0] as any,
-                extractAtSeconds: 2,
+                triggerType: selectedTrigger,
+                extractAtSeconds,
                 personPositions: ["center"],
-                backgroundTemplate: "dark_gradient",
+                backgroundTemplate,
                 useAdvancedEffects: true,
               });
               return {

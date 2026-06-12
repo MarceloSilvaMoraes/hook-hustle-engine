@@ -59,20 +59,32 @@ async function ensureClipThumbnails(
   console.log(`📸 Gerando thumbnails para ${clipsNeedingThumbs.length} clipes sem thumb...`);
   
   const updated = await Promise.all(
-    clips.map(async (clip) => {
+    clips.map(async (clip, index) => {
       if (clip.thumbnailDataUrl) {
         return clip; // Já tem thumbnail
       }
 
       try {
+        // Usar diferentes triggers para adicionar variação visual
+        let selectedTrigger = (clip.triggers && clip.triggers.length > 0) ? clip.triggers[0] : "hook";
+        
+        if (clip.triggers && clip.triggers.length > 1) {
+          // Alternar entre triggers para variação visual
+          selectedTrigger = clip.triggers[index % clip.triggers.length];
+        }
+        
+        // Variar extractAtSeconds e backgroundTemplate para mais diversidade
+        const extractAtSeconds = 2 + (index % 3);
+        const backgroundTemplate = ["dark_gradient", "vibrant_gradient", "abstract"][index % 3] as any;
+        
         const result = await generateProfessionalThumbnail({
           videoPath: videoUrl,
           clipTitle: clip.title,
           clipHook: clip.hookQuote,
-          triggerType: (clip.triggers[0] || "hook") as any,
-          extractAtSeconds: 2,
+          triggerType: selectedTrigger as any,
+          extractAtSeconds,
           personPositions: ["center"],
-          backgroundTemplate: "dark_gradient",
+          backgroundTemplate,
           useAdvancedEffects: true,
         });
         
