@@ -101,9 +101,26 @@ async function downloadVideoFile(videoUrl: string, outputPath: string): Promise<
 }
 
 /**
- * ETAPA 1: Obter caminho local do vídeo
+ * ETAPA 1: Obter caminho local do vídeo ou URL de streaming direto
  */
 async function getLocalVideoPath(videoPath: string, tempDir: string): Promise<{ localPath: string; isDownloaded: boolean }> {
+  // Se for YouTube, usar yt-dlp para pegar a URL de stream direto!
+  if (videoPath.includes("youtube.com") || videoPath.includes("youtu.be")) {
+    console.log(`📥 Resolving YouTube stream URL for: ${videoPath}...`);
+    try {
+      // Usar execSync para chamar yt-dlp sincronicamente
+      const command = `yt-dlp -g -f "bestvideo[ext=mp4]/best" "${videoPath}"`;
+      const directUrl = execSync(command, { encoding: 'utf-8' }).trim().split('\n')[0];
+      if (directUrl && directUrl.startsWith('http')) {
+        console.log(`✅ YouTube stream resolved!`);
+        return { localPath: directUrl, isDownloaded: false }; // É uma URL, ffmpeg baixa apenas o frame necessário
+      }
+    } catch (error) {
+      console.warn("⚠️ yt-dlp failed to resolve YouTube stream URL:", error);
+      // Fallback: continue to normal download logic if yt-dlp fails
+    }
+  }
+
   if (videoPath.startsWith("http://") || videoPath.startsWith("https://")) {
     const timestamp = Date.now();
     const randomId = Math.random().toString(36).substring(7);
@@ -131,7 +148,8 @@ async function extractVideoFrame(
 ): Promise<string> {
   try {
     console.log(`🎥 Extraindo frame no segundo ${secondsToExtract}...`);
-    const command = `ffmpeg -i "${videoPath}" -ss ${secondsToExtract} -vframes 1 -q:v 2 -vf "scale=1920:1080:force_original_aspect_ratio=decrease" "${outputPath}" -y`;
+    // MUITO IMPORTANTE: -ss ANTES de -i faz "fast seek", essencial para URLs remotas!
+    const command = `ffmpeg -ss ${secondsToExtract} -i "${videoPath}" -vframes 1 -q:v 2 -vf "scale=1920:1080:force_original_aspect_ratio=decrease" "${outputPath}" -y`;
     execSync(command, { stdio: "pipe" });
     return outputPath;
   } catch (error) {
